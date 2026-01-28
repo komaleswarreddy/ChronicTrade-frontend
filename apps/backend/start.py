@@ -65,7 +65,10 @@ if __name__ == '__main__':
         print("Tech Stack: Python + FastAPI + PostgreSQL\n")
         
         import uvicorn
-        uvicorn.run("main:app", host="0.0.0.0", port=4000, reload=True)
+        port = int(os.getenv("PORT", "4000"))
+        # Only enable reload in development (not production)
+        reload = os.getenv("ENV", "development") == "development"
+        uvicorn.run("main:app", host="0.0.0.0", port=port, reload=reload)
     else:
         print("❌ Cannot start server without database connection")
         sys.exit(1)
