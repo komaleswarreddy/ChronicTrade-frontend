@@ -116,6 +116,27 @@ def run_python_migration(script_path):
     elif hasattr(module, 'migrate_holdings'):
         # Special case for holdings migration
         module.migrate_holdings()
+    elif hasattr(module, 'migrate_phase11_simulated_execution'):
+        # Phase 11 migration
+        module.migrate_phase11_simulated_execution()
+    elif hasattr(module, 'migrate_phase9_agent_tables'):
+        # Phase 9 migration
+        module.migrate_agent_tables()
+    elif hasattr(module, 'migrate_phase10_structured_explanation'):
+        # Phase 10 migration
+        module.migrate_phase10_structured_explanation()
+    elif hasattr(module, 'migrate_phase12_outcome_tracking'):
+        # Phase 12 migration
+        module.migrate_phase12_outcome_tracking()
+    elif hasattr(module, 'migrate_phase13_learning'):
+        # Phase 13 migration
+        module.migrate_phase13_learning()
+    elif hasattr(module, 'migrate_phase14_autonomy'):
+        # Phase 14 migration
+        module.migrate_phase14_autonomy()
+    elif hasattr(module, 'migrate_phase16_autonomous_execution'):
+        # Phase 16 migration
+        module.migrate_phase16_autonomous_execution()
     else:
         print(f"    Warning: {script_path.name} does not have migrate() function")
 

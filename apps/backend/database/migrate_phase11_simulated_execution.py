@@ -87,5 +87,9 @@ def migrate_phase11_simulated_execution():
         conn.close()
 
 
+def migrate():
+    """Migration entry point for run_migrations.py"""
+    migrate_phase11_simulated_execution()
+
 if __name__ == "__main__":
     migrate_phase11_simulated_execution()

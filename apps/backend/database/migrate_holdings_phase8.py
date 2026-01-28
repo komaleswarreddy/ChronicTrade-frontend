@@ -38,13 +38,30 @@ def migrate_holdings():
         if cursor.fetchone():
             print("✅ Holdings table already has status column. Migration may have already run.")
             # Still update existing rows that might not have status set
+            # Check if added_at column exists first
             cursor.execute("""
-                UPDATE holdings
-                SET status = 'OPEN',
-                    source = 'MANUAL_BUY',
-                    opened_at = COALESCE(opened_at, added_at, CURRENT_TIMESTAMP)
-                WHERE status IS NULL OR status = ''
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'holdings' AND column_name = 'added_at'
             """)
+            has_added_at = cursor.fetchone() is not None
+            
+            if has_added_at:
+                cursor.execute("""
+                    UPDATE holdings
+                    SET status = 'OPEN',
+                        source = 'MANUAL_BUY',
+                        opened_at = COALESCE(opened_at, added_at, CURRENT_TIMESTAMP)
+                    WHERE status IS NULL OR status = ''
+                """)
+            else:
+                cursor.execute("""
+                    UPDATE holdings
+                    SET status = 'OPEN',
+                        source = 'MANUAL_BUY',
+                        opened_at = COALESCE(opened_at, CURRENT_TIMESTAMP)
+                    WHERE status IS NULL OR status = ''
+                """)
             updated = cursor.rowcount
             if updated > 0:
                 print(f"✅ Updated {updated} holdings with default status and source")
@@ -68,14 +85,32 @@ def migrate_holdings():
         # Update existing holdings
         print("📝 Updating existing holdings...")
         
+        # Check if added_at column exists
         cursor.execute("""
-            UPDATE holdings
-            SET 
-                status = COALESCE(status, 'OPEN'),
-                source = COALESCE(source, 'MANUAL_BUY'),
-                opened_at = COALESCE(opened_at, added_at, CURRENT_TIMESTAMP)
-            WHERE status IS NULL OR status = ''
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'holdings' AND column_name = 'added_at'
         """)
+        has_added_at = cursor.fetchone() is not None
+        
+        if has_added_at:
+            cursor.execute("""
+                UPDATE holdings
+                SET 
+                    status = COALESCE(status, 'OPEN'),
+                    source = COALESCE(source, 'MANUAL_BUY'),
+                    opened_at = COALESCE(opened_at, added_at, CURRENT_TIMESTAMP)
+                WHERE status IS NULL OR status = ''
+            """)
+        else:
+            cursor.execute("""
+                UPDATE holdings
+                SET 
+                    status = COALESCE(status, 'OPEN'),
+                    source = COALESCE(source, 'MANUAL_BUY'),
+                    opened_at = COALESCE(opened_at, CURRENT_TIMESTAMP)
+                WHERE status IS NULL OR status = ''
+            """)
         
         updated = cursor.rowcount
         conn.commit()
