@@ -7,5 +7,5 @@ pyjwt>=2.8.0
 cryptography>=41.0.0
 httpx>=0.25.0
 slowapi>=0.1.9
-clerk-sdk>=1.0.0
+clerk-sdk>=0.4.5
 
