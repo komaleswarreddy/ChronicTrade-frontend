@@ -168,6 +168,26 @@ except ImportError:  # pragma: no cover
     def load_dotenv(*args, **kwargs):
         return None
 
+# Auto-run migrations on startup (for Render.com and other cloud deployments)
+# This allows migrations to run automatically without needing shell access
+if os.getenv("ENV") == "production":
+    try:
+        import sys
+        from pathlib import Path
+        # Add database directory to path
+        database_dir = Path(__file__).parent / "database"
+        if str(database_dir) not in sys.path:
+            sys.path.insert(0, str(database_dir))
+        
+        from run_migrations import main as migrate_main
+        print("🔄 [Startup] Running database migrations...")
+        migrate_main()
+        print("✅ [Startup] Migrations completed successfully!")
+    except Exception as e:
+        # Don't fail startup if migrations fail (might already be run, or non-critical)
+        print(f"⚠️ [Startup] Migration warning (non-critical): {e}")
+        print("⚠️ [Startup] Continuing startup - migrations may already be applied")
+
 app = FastAPI(
     title="ChronoShift API", 
     version="1.0.0",
