@@ -172,21 +172,31 @@ except ImportError:  # pragma: no cover
 # This allows migrations to run automatically without needing shell access
 if os.getenv("ENV") == "production":
     try:
-        import sys
-        from pathlib import Path
-        # Add database directory to path
-        database_dir = Path(__file__).parent / "database"
-        if str(database_dir) not in sys.path:
-            sys.path.insert(0, str(database_dir))
-        
-        from run_migrations import main as migrate_main
-        print("🔄 [Startup] Running database migrations...")
-        migrate_main()
-        print("✅ [Startup] Migrations completed successfully!")
+        # Verify DATABASE_URL is set
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            print("⚠️ [Startup] DATABASE_URL not set - skipping migrations")
+        else:
+            # Mask password in logs for security
+            masked_url = database_url.split("@")[0].split(":")[0] + ":***@" + "@".join(database_url.split("@")[1:]) if "@" in database_url else "***"
+            print(f"🔄 [Startup] Running database migrations... (DB: {masked_url})")
+            
+            import sys
+            from pathlib import Path
+            # Add database directory to path
+            database_dir = Path(__file__).parent / "database"
+            if str(database_dir) not in sys.path:
+                sys.path.insert(0, str(database_dir))
+            
+            from run_migrations import main as migrate_main
+            migrate_main()
+            print("✅ [Startup] Migrations completed successfully!")
     except Exception as e:
         # Don't fail startup if migrations fail (might already be run, or non-critical)
         print(f"⚠️ [Startup] Migration warning (non-critical): {e}")
         print("⚠️ [Startup] Continuing startup - migrations may already be applied")
+        import traceback
+        print(f"⚠️ [Startup] Traceback: {traceback.format_exc()}")
 
 app = FastAPI(
     title="ChronoShift API", 
