@@ -76,15 +76,10 @@ from middleware.logging_middleware import LoggingMiddleware, log_authentication_
 # Import authentication - try production auth, fallback to basic
 try:
     from auth.clerk_verify import get_current_user_production
-    _get_authenticated_user_sync = get_current_user_production
+    get_authenticated_user = get_current_user_production
 except (ImportError, AttributeError):
     from auth.clerk_auth import get_current_user
-    _get_authenticated_user_sync = get_current_user
-
-# Make auth async-compatible
-async def get_authenticated_user(*args, **kwargs):
-    """Wrapper to ensure auth is async"""
-    return await _get_authenticated_user_sync(*args, **kwargs)
+    get_authenticated_user = get_current_user
 
 # Environment-based auth bypass for testing
 ENV = os.getenv("ENV", "development")
@@ -1336,24 +1331,36 @@ async def get_simulations(
     """Get all simulations for authenticated user"""
     logger.info(f"Fetching simulations for user {user_id}, status={status}, limit={limit}")
     
+    conn = None
     try:
-        conn = get_db_connection()
-        simulations = get_user_simulations(
-            user_id=user_id,
-            status=status,
-            limit=limit,
-            conn=conn
-        )
-        conn.close()
+        # Use async DB connection to avoid blocking
+        loop = asyncio.get_event_loop()
+        conn = await loop.run_in_executor(db_executor, get_db_connection)
         
-        # Convert to response format
-        simulation_responses = [_convert_simulation_to_response(sim) for sim in simulations]
+        # Run blocking operation in thread pool
+        def run_simulations_ops():
+            simulations = get_user_simulations(
+                user_id=user_id,
+                status=status,
+                limit=limit,
+                conn=conn
+            )
+            # Convert to response format
+            return [_convert_simulation_to_response(sim) for sim in simulations]
+        
+        simulation_responses = await loop.run_in_executor(db_executor, run_simulations_ops)
+        
+        if conn:
+            await loop.run_in_executor(db_executor, conn.close)
         
         return SimulationsListResponse(
             simulations=simulation_responses,
             count=len(simulation_responses)
         )
     except Exception as e:
+        if conn:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(db_executor, conn.close)
         logger.error(f"Error fetching simulations: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2031,13 +2038,25 @@ async def get_portfolio_capital_endpoint(
     """Get portfolio capital for authenticated user (Phase 20)"""
     logger.info(f"Fetching portfolio capital for user {user_id}")
     
+    conn = None
     try:
-        conn = get_db_connection()
-        capital = get_portfolio_capital(user_id, conn=conn)
-        conn.close()
+        # Use async DB connection to avoid blocking
+        loop = asyncio.get_event_loop()
+        conn = await loop.run_in_executor(db_executor, get_db_connection)
         
+        # Run blocking operation in thread pool
+        def run_capital_ops():
+            return get_portfolio_capital(user_id, conn=conn)
+        
+        capital = await loop.run_in_executor(db_executor, run_capital_ops)
+        
+        if conn:
+            await loop.run_in_executor(db_executor, conn.close)
         return capital
     except Exception as e:
+        if conn:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(db_executor, conn.close)
         logger.error(f"Error fetching portfolio capital: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2049,13 +2068,25 @@ async def get_portfolio_exposure_endpoint(
     """Get portfolio exposure breakdown (Phase 20)"""
     logger.info(f"Computing portfolio exposure for user {user_id}")
     
+    conn = None
     try:
-        conn = get_db_connection()
-        exposure = compute_exposure(user_id, conn=conn)
-        conn.close()
+        # Use async DB connection to avoid blocking
+        loop = asyncio.get_event_loop()
+        conn = await loop.run_in_executor(db_executor, get_db_connection)
         
+        # Run blocking operation in thread pool
+        def run_exposure_ops():
+            return compute_exposure(user_id, conn=conn)
+        
+        exposure = await loop.run_in_executor(db_executor, run_exposure_ops)
+        
+        if conn:
+            await loop.run_in_executor(db_executor, conn.close)
         return exposure
     except Exception as e:
+        if conn:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(db_executor, conn.close)
         logger.error(f"Error computing exposure: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
