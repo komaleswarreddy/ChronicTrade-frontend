@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function ExecutionGatesPanel({ simulationId, getToken }) {
   const [gates, setGates] = useState([])
@@ -35,8 +33,7 @@ export default function ExecutionGatesPanel({ simulationId, getToken }) {
         }
       }
       
-      const response = await axios.get(
-        `${API_BASE}/api/executions/${simulationId}/gates`,
+      const response = await api.get(`/api/executions/${simulationId}/gates`,
         authConfig
       )
       

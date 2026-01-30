@@ -207,17 +207,21 @@ app = FastAPI(
 # CORS configuration
 # Allow frontend origin from environment variable, fallback to localhost for development
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
-ALLOWED_ORIGINS = [FRONTEND_ORIGIN]
-# Support multiple origins if comma-separated
-if "," in FRONTEND_ORIGIN:
-    ALLOWED_ORIGINS = [origin.strip() for origin in FRONTEND_ORIGIN.split(",")]
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in FRONTEND_ORIGIN.split(",")
+    if origin.strip()
+]
+
+# Log CORS configuration on startup
+print(f"🌐 CORS allowed origins: {ALLOWED_ORIGINS}")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*", "Authorization", "Content-Type"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Logging middleware for audit trail

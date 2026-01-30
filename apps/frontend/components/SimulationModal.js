@@ -1,9 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function SimulationModal({ 
   proposal, 
@@ -39,8 +37,7 @@ export default function SimulationModal({
         }
       }
       
-      const response = await axios.post(
-        `${API_BASE}/api/simulations/create`,
+      const response = await api.post(`/api/simulations/create`,
         {
           proposal_id: proposal.proposal_id,
           quantity: quantity

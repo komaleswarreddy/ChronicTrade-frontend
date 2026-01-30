@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function AutonomousExecutionPanel({ getToken }) {
   const [simulations, setSimulations] = useState([])
@@ -37,8 +35,7 @@ export default function AutonomousExecutionPanel({ getToken }) {
         }
       }
       
-      const response = await axios.get(
-        `${API_BASE}/api/simulations`,
+      const response = await api.get(`/api/simulations`,
         authConfig
       )
       
@@ -82,8 +79,7 @@ export default function AutonomousExecutionPanel({ getToken }) {
         }
       }
       
-      const response = await axios.post(
-        `${API_BASE}/api/executions/run-autonomous`,
+      const response = await api.post(`/api/executions/run-autonomous`,
         { simulation_id: simulationId },
         authConfig
       )

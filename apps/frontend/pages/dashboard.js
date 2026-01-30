@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useUser, useAuth } from '@clerk/nextjs'
-import axios from 'axios'
+import api from '../lib/api'
 import NavBar from '../components/NavBar'
 import PortfolioCard from '../components/PortfolioCard'
 import PortfolioTrendChart from '../components/PortfolioTrendChart'
@@ -22,19 +22,6 @@ import CapitalSummaryPanel from '../components/CapitalSummaryPanel'
 import StrategyPerformancePanel from '../components/StrategyPerformancePanel'
 import DecisionReplayPanel from '../components/DecisionReplayPanel'
 import DecisionTimeline from '../components/DecisionTimeline'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
-
-// Add axios interceptor for better error handling
-axios.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      console.warn('Authentication error (401): Token may be expired or invalid')
-    }
-    return Promise.reject(error)
-  }
-)
 
 export default function Dashboard() {
   const [portfolioSummary, setPortfolioSummary] = useState(null)
@@ -69,7 +56,7 @@ export default function Dashboard() {
         }
       }
       
-      const response = await axios.get(`${API_BASE}/api/alerts?limit=10`, authConfig)
+      const response = await api.get('/api/alerts?limit=10', authConfig)
       const alertsData = response.data || []
       setAlerts(alertsData)
       if (alertsData.length > 0) {
@@ -129,14 +116,14 @@ export default function Dashboard() {
       
       // Fetch all dashboard data with authentication
       const results = await Promise.allSettled([
-        axios.get(`${API_BASE}/api/portfolio/summary`, authConfig),
-        axios.get(`${API_BASE}/api/portfolio/holdings`, authConfig),
-        axios.get(`${API_BASE}/api/market/pulse`, authConfig),
-        axios.get(`${API_BASE}/api/arbitrage?limit=5`, authConfig),
-        axios.get(`${API_BASE}/api/alerts?limit=5`, authConfig),
-        axios.get(`${API_BASE}/api/portfolio/trend?days=30&_t=${new Date().getTime()}`, authConfig),
-        axios.get(`${API_BASE}/api/watchlist`, authConfig),
-        axios.get(`${API_BASE}/api/agent/proposals?limit=10`, authConfig)
+        api.get('/api/portfolio/summary', authConfig),
+        api.get('/api/portfolio/holdings', authConfig),
+        api.get('/api/market/pulse', authConfig),
+        api.get('/api/arbitrage?limit=5', authConfig),
+        api.get('/api/alerts?limit=5', authConfig),
+        api.get(`/api/portfolio/trend?days=30&_t=${new Date().getTime()}`, authConfig),
+        api.get('/api/watchlist', authConfig),
+        api.get('/api/agent/proposals?limit=10', authConfig)
       ])
       
       const [summaryRes, holdingsRes, pulseRes, arbitrageRes, alertsRes, trendRes, watchlistRes, proposalsRes] = results
@@ -151,7 +138,7 @@ export default function Dashboard() {
       
       // Holdings - use new active holdings endpoint
       try {
-        const holdingsActiveRes = await axios.get(`${API_BASE}/api/holdings/active`, authConfig)
+        const holdingsActiveRes = await api.get('/api/holdings/active', authConfig)
         setHoldings(holdingsActiveRes.data || [])
       } catch (err) {
         if (holdingsRes.status === 'fulfilled') {
@@ -253,9 +240,9 @@ export default function Dashboard() {
         
         const timestamp = new Date().getTime()
         const [summaryRes, holdingsRes, trendRes] = await Promise.allSettled([
-          axios.get(`${API_BASE}/api/portfolio/summary`, authConfig),
-          axios.get(`${API_BASE}/api/holdings/active`, authConfig),
-          axios.get(`${API_BASE}/api/portfolio/trend?days=30&_t=${timestamp}`, authConfig)
+          api.get('/api/portfolio/summary', authConfig),
+          api.get('/api/holdings/active', authConfig),
+          api.get(`/api/portfolio/trend?days=30&_t=${timestamp}`, authConfig)
         ])
         
         if (summaryRes.status === 'fulfilled') {
@@ -294,7 +281,7 @@ export default function Dashboard() {
         }
       }
       
-      const watchlistRes = await axios.get(`${API_BASE}/api/watchlist`, authConfig)
+      const watchlistRes = await api.get('/api/watchlist', authConfig)
       setWatchlist(watchlistRes.data?.items || [])
     } catch (err) {
       console.error('Failed to refresh watchlist:', err)
@@ -312,7 +299,7 @@ export default function Dashboard() {
         }
       }
       
-      await axios.delete(`${API_BASE}/api/watchlist/remove`, {
+      await api.delete('/api/watchlist/remove', {
         ...authConfig,
         data: { asset_id: assetId }
       })
@@ -336,18 +323,18 @@ export default function Dashboard() {
       }
       
       // Check current status
-      const checkRes = await axios.get(`${API_BASE}/api/watchlist/check/${assetId}`, authConfig)
+      const checkRes = await api.get(`/api/watchlist/check/${assetId}`, authConfig)
       const isCurrentlyInWatchlist = checkRes.data?.in_watchlist || false
       
       if (isCurrentlyInWatchlist) {
         // Remove from watchlist
-        await axios.delete(`${API_BASE}/api/watchlist/remove`, {
+        await api.delete('/api/watchlist/remove', {
           ...authConfig,
           data: { asset_id: assetId }
         })
       } else {
         // Add to watchlist
-        await axios.post(`${API_BASE}/api/watchlist/add`, 
+        await api.post('/api/watchlist/add', 
           { asset_id: assetId },
           authConfig
         )
@@ -437,7 +424,7 @@ export default function Dashboard() {
                       const timestamp = new Date().getTime()
                       const random = Math.random()
                       console.log('[Dashboard] Refreshing trend data...', { timestamp, random })
-                      const trendRes = await axios.get(`${API_BASE}/api/portfolio/trend?days=30&_t=${timestamp}&_r=${random}`, authConfig)
+                      const trendRes = await api.get(`/api/portfolio/trend?days=30&_t=${timestamp}&_r=${random}`, authConfig)
                       const trendDataArray = trendRes.data || []
                       console.log('[Dashboard] Trend data refreshed:', { count: trendDataArray.length, latest: trendDataArray[trendDataArray.length - 1] })
                       setTrendData(trendDataArray)
@@ -501,9 +488,9 @@ export default function Dashboard() {
                   // Force refresh trend by adding timestamp to bypass cache
                   const timestamp = new Date().getTime()
                   const [holdingsRes, summaryRes, trendRes] = await Promise.allSettled([
-                    axios.get(`${API_BASE}/api/holdings/active`, authConfig),
-                    axios.get(`${API_BASE}/api/portfolio/summary`, authConfig),
-                    axios.get(`${API_BASE}/api/portfolio/trend?days=30&_t=${timestamp}`, authConfig)
+                    api.get('/api/holdings/active', authConfig),
+                    api.get('/api/portfolio/summary', authConfig),
+                    api.get(`/api/portfolio/trend?days=30&_t=${timestamp}`, authConfig)
                   ])
                   if (holdingsRes.status === 'fulfilled') {
                     setHoldings(holdingsRes.value.data || [])
@@ -566,9 +553,9 @@ export default function Dashboard() {
                             // Force refresh trend by adding timestamp
                             const timestamp = new Date().getTime()
                             const [holdingsRes, summaryRes, trendRes] = await Promise.allSettled([
-                              axios.get(`${API_BASE}/api/holdings/active`, authConfig),
-                              axios.get(`${API_BASE}/api/portfolio/summary`, authConfig),
-                              axios.get(`${API_BASE}/api/portfolio/trend?days=30&_t=${timestamp}`, authConfig)
+                              api.get('/api/holdings/active', authConfig),
+                              api.get('/api/portfolio/summary', authConfig),
+                              api.get(`/api/portfolio/trend?days=30&_t=${timestamp}`, authConfig)
                             ])
                             if (holdingsRes.status === 'fulfilled') {
                               setHoldings(holdingsRes.value.data || [])
@@ -673,8 +660,8 @@ export default function Dashboard() {
                       }, 5000) // Update every 5 seconds
                       
                       // Trigger agent analysis with timeout
-                      const runRes = await axios.post(
-                        `${API_BASE}/api/agent/run`,
+                      const runRes = await api.post(
+                        '/api/agent/run',
                         { asset_id: null },
                         {
                           ...authConfig,
@@ -707,7 +694,7 @@ export default function Dashboard() {
                         // Refresh proposals from database after agent run
                         await new Promise(resolve => setTimeout(resolve, 2000))
                         try {
-                          const proposalsRes = await axios.get(`${API_BASE}/api/agent/proposals?limit=10`, authConfig)
+                          const proposalsRes = await api.get('/api/agent/proposals?limit=10', authConfig)
                           if (proposalsRes.data && proposalsRes.data.length > 0) {
                             setAgentProposals(proposalsRes.data)
                           }
@@ -788,10 +775,10 @@ export default function Dashboard() {
                         
                         const timestamp = new Date().getTime()
                         const [holdingsRes, summaryRes, trendRes, proposalsRes] = await Promise.allSettled([
-                          axios.get(`${API_BASE}/api/holdings/active`, authConfig),
-                          axios.get(`${API_BASE}/api/portfolio/summary`, authConfig),
-                          axios.get(`${API_BASE}/api/portfolio/trend?days=30&_t=${timestamp}`, authConfig),
-                          axios.get(`${API_BASE}/api/agent/proposals?limit=10`, authConfig)
+                          api.get('/api/holdings/active', authConfig),
+                          api.get('/api/portfolio/summary', authConfig),
+                          api.get(`/api/portfolio/trend?days=30&_t=${timestamp}`, authConfig),
+                          api.get('/api/agent/proposals?limit=10', authConfig)
                         ])
                         if (holdingsRes.status === 'fulfilled') {
                           setHoldings(holdingsRes.value.data || [])
@@ -849,9 +836,9 @@ export default function Dashboard() {
                   console.log('[Dashboard] Refreshing data after simulation execution...', { timestamp, random })
                   
                   const [holdingsRes, summaryRes, trendRes] = await Promise.allSettled([
-                    axios.get(`${API_BASE}/api/holdings/active?_t=${timestamp}&_r=${random}`, authConfig),
-                    axios.get(`${API_BASE}/api/portfolio/summary?_t=${timestamp}&_r=${random}`, authConfig),
-                    axios.get(`${API_BASE}/api/portfolio/trend?days=30&_t=${timestamp}&_r=${random}`, authConfig)
+                    api.get(`/api/holdings/active?_t=${timestamp}&_r=${random}`, authConfig),
+                    api.get(`/api/portfolio/summary?_t=${timestamp}&_r=${random}`, authConfig),
+                    api.get(`/api/portfolio/trend?days=30&_t=${timestamp}&_r=${random}`, authConfig)
                   ])
                   
                   if (holdingsRes.status === 'fulfilled') {

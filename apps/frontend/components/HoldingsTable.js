@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function HoldingsTable({ holdings, onWatchlistToggle, getToken, watchlist = [], onHoldingsUpdate }) {
   if (!holdings || holdings.length === 0) {
@@ -151,7 +149,7 @@ function HoldingActions({ holding, getToken, onHoldingsUpdate }) {
         }
       }
       
-      const response = await axios.post(`${API_BASE}/api/holdings/sell`, {
+      const response = await api.post(`/api/holdings/sell`, {
         holding_id: holding.id,
         quantity: quantity || null
       }, authConfig)

@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function StrategyReliabilityBadge({ strategyId, getToken }) {
   const [reliability, setReliability] = useState(null)
@@ -31,8 +29,7 @@ export default function StrategyReliabilityBadge({ strategyId, getToken }) {
         }
       }
       
-      const response = await axios.get(
-        `${API_BASE}/api/explainability/strategy-reliability/${strategyId}`,
+      const response = await api.get(`/api/explainability/strategy-reliability/${strategyId}`,
         authConfig
       )
       

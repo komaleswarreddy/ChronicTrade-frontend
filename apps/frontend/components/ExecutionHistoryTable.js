@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function ExecutionHistoryTable({ getToken }) {
   const [executions, setExecutions] = useState([])
@@ -61,8 +59,7 @@ export default function ExecutionHistoryTable({ getToken }) {
         }
       }
       
-      const response = await axios.get(
-        `${API_BASE}/api/executions/autonomous`,
+      const response = await api.get(`/api/executions/autonomous`,
         authConfig
       )
       

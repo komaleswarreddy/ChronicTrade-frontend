@@ -1,7 +1,5 @@
 import { useState } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function WatchlistCard({ watchlist, onRemove, getToken }) {
   const [removing, setRemoving] = useState({})
@@ -25,7 +23,7 @@ export default function WatchlistCard({ watchlist, onRemove, getToken }) {
         }
       }
       
-      await axios.delete(`${API_BASE}/api/watchlist/remove`, {
+      await api.delete(`/api/watchlist/remove`, {
         ...authConfig,
         data: { asset_id: assetId }
       })

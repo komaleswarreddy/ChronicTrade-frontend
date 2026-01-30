@@ -1,9 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function ApprovalDialog({ 
   simulation, 
@@ -41,8 +39,7 @@ export default function ApprovalDialog({
         }
       }
       
-      const response = await axios.post(
-        `${API_BASE}/api/simulations/approve`,
+      const response = await api.post(`/api/simulations/approve`,
         { simulation_id: simulation.id },
         authConfig
       )
@@ -82,8 +79,7 @@ export default function ApprovalDialog({
         }
       }
       
-      const response = await axios.post(
-        `${API_BASE}/api/simulations/reject`,
+      const response = await api.post(`/api/simulations/reject`,
         { 
           simulation_id: simulation.id,
           reason: rejectionReason || 'No reason provided'

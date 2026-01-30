@@ -10,7 +10,7 @@ import ReactFlow, {
   MarkerType,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
-import axios from 'axios'
+import api from '../lib/api'
 import ExecutionStepNode from './nodes/ExecutionStepNode'
 import ComplianceGateNode from './nodes/ComplianceGateNode'
 import ExecutionGateNode from './nodes/ExecutionGateNode'
@@ -164,15 +164,13 @@ export default function ExecutionCanvas({
           }
         }
         
-        const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
-        
         // Fetch all data in parallel
         const [stepsRes, complianceRes, gatesRes, logisticsRes, counterfactualRes] = await Promise.allSettled([
-          axios.get(`${API_BASE}/api/executions/${simulationId}/steps`, authConfig),
-          axios.get(`${API_BASE}/api/compliance/${simulationId}/evaluation`, authConfig).catch(() => ({ data: null })),
-          axios.get(`${API_BASE}/api/executions/${simulationId}/gates`, authConfig).catch(() => ({ data: null })),
-          axios.get(`${API_BASE}/api/logistics/${simulationId}/timeline`, authConfig).catch(() => ({ data: null })),
-          axios.get(`${API_BASE}/api/counterfactual/${simulationId}`, authConfig).catch(() => ({ data: null })),
+          api.get(`/api/executions/${simulationId}/steps`, authConfig),
+          api.get(`/api/compliance/${simulationId}/evaluation`, authConfig).catch(() => ({ data: null })),
+          api.get(`/api/executions/${simulationId}/gates`, authConfig).catch(() => ({ data: null })),
+          api.get(`/api/logistics/${simulationId}/timeline`, authConfig).catch(() => ({ data: null })),
+          api.get(`/api/counterfactual/${simulationId}`, authConfig).catch(() => ({ data: null })),
         ])
         
         const data = {

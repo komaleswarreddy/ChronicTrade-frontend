@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function DecisionReplayPanel({ simulationId, getToken }) {
   const [lineage, setLineage] = useState(null)
@@ -37,8 +35,8 @@ export default function DecisionReplayPanel({ simulationId, getToken }) {
       }
       
       const [lineageRes, evalRes] = await Promise.all([
-        axios.get(`${API_BASE}/api/audit/decision-lineage?simulation_id=${simulationId}`, authConfig).catch(() => ({ data: { lineage: [] } })),
-        axios.get(`${API_BASE}/api/audit/policy-evaluations?simulation_id=${simulationId}`, authConfig).catch(() => ({ data: { evaluations: [] } }))
+        api.get(`/api/audit/decision-lineage?simulation_id=${simulationId}`, authConfig).catch(() => ({ data: { lineage: [] } })),
+        api.get(`/api/audit/policy-evaluations?simulation_id=${simulationId}`, authConfig).catch(() => ({ data: { evaluations: [] } }))
       ])
       
       setLineage(lineageRes.data.lineage?.[0] || null)

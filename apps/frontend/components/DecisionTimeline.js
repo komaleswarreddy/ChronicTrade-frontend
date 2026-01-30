@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function DecisionTimeline({ simulationId, getToken }) {
   const [timeline, setTimeline] = useState([])
@@ -36,8 +34,7 @@ export default function DecisionTimeline({ simulationId, getToken }) {
       }
       
       // Fetch audit log entries for this simulation
-      const response = await axios.get(
-        `${API_BASE}/api/simulations/${simulationId}`,
+      const response = await api.get(`/api/simulations/${simulationId}`,
         authConfig
       ).catch(() => ({ data: {} }))
       

@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function WhatChangedPanel({ proposalId, getToken }) {
   const [diff, setDiff] = useState(null)
@@ -37,8 +35,8 @@ export default function WhatChangedPanel({ proposalId, getToken }) {
       }
       
       const [diffRes, narrativeRes] = await Promise.all([
-        axios.get(`${API_BASE}/api/explainability/proposal-diff/${proposalId}`, authConfig).catch(() => ({ data: { has_previous: false } })),
-        axios.get(`${API_BASE}/api/explainability/narrative/${proposalId}`, authConfig).catch(() => ({ data: { narrative: null } }))
+        api.get(`/api/explainability/proposal-diff/${proposalId}`, authConfig).catch(() => ({ data: { has_previous: false } })),
+        api.get(`/api/explainability/narrative/${proposalId}`, authConfig).catch(() => ({ data: { narrative: null } }))
       ])
       
       setDiff(diffRes.data)

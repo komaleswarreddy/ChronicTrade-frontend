@@ -1,11 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import axios from 'axios'
+import api from '../lib/api'
 import ApprovalDialog from './ApprovalDialog'
 import SimulationDetailModal from './SimulationDetailModal'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
 
 export default function SimulationHistoryTable({ getToken, onSimulationUpdate }) {
   const [simulations, setSimulations] = useState([])
@@ -42,8 +40,8 @@ export default function SimulationHistoryTable({ getToken, onSimulationUpdate })
         }
       }
       
-      const response = await axios.get(
-        `${API_BASE}/api/simulations`,
+      const response = await api.get(
+        '/api/simulations',
         authConfig
       )
       
@@ -149,8 +147,8 @@ export default function SimulationHistoryTable({ getToken, onSimulationUpdate })
         }
       }
       
-      const response = await axios.post(
-        `${API_BASE}/api/simulations/${simulation.id}/execute`,
+      const response = await api.post(
+        `/api/simulations/${simulation.id}/execute`,
         {},
         authConfig
       )

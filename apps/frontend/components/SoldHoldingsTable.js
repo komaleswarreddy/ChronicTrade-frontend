@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth, useUser } from '@clerk/nextjs'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function SoldHoldingsTable({ getToken: propGetToken, onRefresh }) {
   const [soldHoldings, setSoldHoldings] = useState([])
@@ -51,8 +49,8 @@ export default function SoldHoldingsTable({ getToken: propGetToken, onRefresh })
       }
       
       const [soldRes, profitRes] = await Promise.allSettled([
-        axios.get(`${API_BASE}/api/holdings/sold`, authConfig),
-        axios.get(`${API_BASE}/api/holdings/realized-profit`, authConfig)
+        api.get(`/api/holdings/sold`, authConfig),
+        api.get(`/api/holdings/realized-profit`, authConfig)
       ])
       
       // Handle sold holdings response

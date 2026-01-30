@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function AutonomyControlPanel({ getToken }) {
   const [status, setStatus] = useState(null)
@@ -37,8 +35,7 @@ export default function AutonomyControlPanel({ getToken }) {
         }
       }
       
-      const response = await axios.get(
-        `${API_BASE}/api/autonomy/status`,
+      const response = await api.get(`/api/autonomy/status`,
         authConfig
       )
       
@@ -71,8 +68,7 @@ export default function AutonomyControlPanel({ getToken }) {
         }
       }
       
-      const response = await axios.post(
-        `${API_BASE}/api/autonomy/enable`,
+      const response = await api.post(`/api/autonomy/enable`,
         {
           policy_name: 'default_policy',
           max_daily_trades: 1,  // Hard limit
@@ -127,8 +123,7 @@ export default function AutonomyControlPanel({ getToken }) {
         }
       }
       
-      const response = await axios.post(
-        `${API_BASE}/api/autonomy/disable`,
+      const response = await api.post(`/api/autonomy/disable`,
         { reason: 'Disabled by user via UI' },
         authConfig
       )

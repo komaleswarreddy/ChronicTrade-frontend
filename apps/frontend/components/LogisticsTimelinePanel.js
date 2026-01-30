@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function LogisticsTimelinePanel({ simulationId, getToken }) {
   const [timeline, setTimeline] = useState([])
@@ -35,8 +33,7 @@ export default function LogisticsTimelinePanel({ simulationId, getToken }) {
         }
       }
       
-      const response = await axios.get(
-        `${API_BASE}/api/logistics/${simulationId}/timeline`,
+      const response = await api.get(`/api/logistics/${simulationId}/timeline`,
         authConfig
       )
       

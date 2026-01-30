@@ -1,11 +1,9 @@
 import { useState } from 'react'
-import axios from 'axios'
+import api from '../lib/api'
 import SimulationModal from './SimulationModal'
 import ConfidenceStabilityIndicator from './ConfidenceStabilityIndicator'
 import StrategyReliabilityBadge from './StrategyReliabilityBadge'
 import WhatChangedPanel from './WhatChangedPanel'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
 
 export default function AdvisorCard({ proposal, getToken, onAction }) {
   const [expanded, setExpanded] = useState(false)
@@ -63,8 +61,7 @@ export default function AdvisorCard({ proposal, getToken, onAction }) {
         }
       }
       
-      const response = await axios.get(
-        `${API_BASE}/api/explainability/narrative/${proposal.proposal_id}`,
+      const response = await api.get(`/api/explainability/narrative/${proposal.proposal_id}`,
         authConfig
       )
       
@@ -223,7 +220,7 @@ export default function AdvisorCard({ proposal, getToken, onAction }) {
                   evidenceCount: proposal.evidence?.length || 0
                 })
                 
-                const detailRes = await axios.get(`${API_BASE}/api/agent/proposals/${proposal.proposal_id}`, authConfig)
+                const detailRes = await api.get(`/api/agent/proposals/${proposal.proposal_id}`, authConfig)
                 
                 console.log(`[AdvisorCard] Received proposal detail from API:`, {
                   proposal_id: detailRes.data.proposal_id,

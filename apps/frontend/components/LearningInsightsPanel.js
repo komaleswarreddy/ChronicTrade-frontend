@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function LearningInsightsPanel({ getToken }) {
   const [metrics, setMetrics] = useState(null)
@@ -34,8 +32,7 @@ export default function LearningInsightsPanel({ getToken }) {
         }
       }
       
-      const response = await axios.get(
-        `${API_BASE}/api/learning/metrics`,
+      const response = await api.get(`/api/learning/metrics`,
         authConfig
       )
       

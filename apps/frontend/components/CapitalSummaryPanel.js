@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function CapitalSummaryPanel({ getToken }) {
   const [capital, setCapital] = useState(null)
@@ -35,8 +33,8 @@ export default function CapitalSummaryPanel({ getToken }) {
       }
       
       const [capitalRes, exposureRes] = await Promise.all([
-        axios.get(`${API_BASE}/api/portfolio/capital`, authConfig),
-        axios.get(`${API_BASE}/api/portfolio/exposure`, authConfig)
+        api.get(`/api/portfolio/capital`, authConfig),
+        api.get(`/api/portfolio/exposure`, authConfig)
       ])
       
       setCapital(capitalRes.data)

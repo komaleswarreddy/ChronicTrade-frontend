@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function ArbitrageCard({ opportunity, onWatchlistToggle, getToken, isInWatchlist = false }) {
   return (
@@ -90,7 +88,7 @@ function SimulateBuyButton({ opportunity, getToken, onBuySuccess }) {
         }
       }
       
-      await axios.post(`${API_BASE}/api/holdings/buy`, {
+      await api.post(`/api/holdings/buy`, {
         asset_id: opportunity.asset_id,
         quantity: qty,
         buy_price: opportunity.buy_price,

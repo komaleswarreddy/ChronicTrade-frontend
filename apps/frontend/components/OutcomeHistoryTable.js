@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function OutcomeHistoryTable({ getToken }) {
   const [outcomes, setOutcomes] = useState([])
@@ -40,8 +38,7 @@ export default function OutcomeHistoryTable({ getToken }) {
       
       // Attempt to fetch realized outcomes
       try {
-        const realizedResponse = await axios.get(
-          `${API_BASE}/api/outcomes/realized`,
+        const realizedResponse = await api.get(`/api/outcomes/realized`,
           authConfig
         )
         outcomes = realizedResponse.data.outcomes || []
@@ -49,8 +46,7 @@ export default function OutcomeHistoryTable({ getToken }) {
         // Fallback to execution outcomes if realized endpoint doesn't exist
         console.log('Realized outcomes not available, trying execution outcomes...')
         
-        const response = await axios.get(
-          `${API_BASE}/api/outcomes`,
+        const response = await api.get(`/api/outcomes`,
           authConfig
         )
         outcomes = response.data.outcomes || []
@@ -100,8 +96,7 @@ export default function OutcomeHistoryTable({ getToken }) {
         }
       }
       
-      const response = await axios.post(
-        `${API_BASE}/api/outcomes/realize?min_holding_period_days=0`,
+      const response = await api.post(`/api/outcomes/realize?min_holding_period_days=0`,
         {},
         authConfig
       )

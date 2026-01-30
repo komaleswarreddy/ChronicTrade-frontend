@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function ExecutionStepsPanel({ simulationId, getToken }) {
   const [steps, setSteps] = useState([])
@@ -37,8 +35,7 @@ export default function ExecutionStepsPanel({ simulationId, getToken }) {
         }
       }
       
-      const response = await axios.get(
-        `${API_BASE}/api/executions/${simulationId}/steps`,
+      const response = await api.get(`/api/executions/${simulationId}/steps`,
         authConfig
       )
       
@@ -68,8 +65,7 @@ export default function ExecutionStepsPanel({ simulationId, getToken }) {
         }
       }
       
-      const response = await axios.post(
-        `${API_BASE}/api/executions/${simulationId}/execute-step`,
+      const response = await api.post(`/api/executions/${simulationId}/execute-step`,
         {},
         authConfig
       )
@@ -105,8 +101,7 @@ export default function ExecutionStepsPanel({ simulationId, getToken }) {
         }
       }
       
-      const response = await axios.post(
-        `${API_BASE}/api/executions/steps/${stepId}/reset`,
+      const response = await api.post(`/api/executions/steps/${stepId}/reset`,
         {},
         authConfig
       )

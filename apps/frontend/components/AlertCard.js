@@ -1,9 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import axios from 'axios'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000'
+import api from '../lib/api'
 
 export default function AlertCard({ alert, getToken, onMarkRead }) {
   const [showExplanation, setShowExplanation] = useState(false)
@@ -42,7 +40,7 @@ export default function AlertCard({ alert, getToken, onMarkRead }) {
         }
       }
       
-      await axios.patch(`${API_BASE}/api/alerts/${alert.id}/read?read=true`, {}, authConfig)
+      await api.patch(`/api/alerts/${alert.id}/read?read=true`, {}, authConfig)
       
       if (onMarkRead) {
         onMarkRead(alert.id)
