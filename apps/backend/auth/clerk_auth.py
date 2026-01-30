@@ -31,13 +31,14 @@ security = HTTPBearer()
 _jwks_cache = {}
 JWKS_CACHE_TTL = 3600  # Cache for 1 hour
 
-def get_clerk_jwks(issuer: str = None):
+async def get_clerk_jwks(issuer: str = None):
     """
     Fetch Clerk's JSON Web Key Set (JWKS) for JWT verification.
     Uses issuer-specific JWKS endpoint if provided, otherwise uses default.
     Caches the result to avoid repeated HTTP calls.
+    Uses async httpx to avoid blocking the event loop.
     """
-    global _jwks_cache, _jwks_cache_time
+    global _jwks_cache
     import time
     
     # Determine JWKS URL from issuer
@@ -57,9 +58,10 @@ def get_clerk_jwks(issuer: str = None):
     
     try:
         logger.info(f"Fetching Clerk JWKS from {jwks_url}")
-        response = httpx.get(jwks_url, timeout=15.0, follow_redirects=True)
-        response.raise_for_status()
-        jwks = response.json()
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            response = await client.get(jwks_url)
+            response.raise_for_status()
+            jwks = response.json()
         
         # Cache the result
         if not _jwks_cache or not isinstance(_jwks_cache, dict):
@@ -77,7 +79,7 @@ def get_clerk_jwks(issuer: str = None):
         if issuer and jwks_url != DEFAULT_CLERK_JWKS_URL:
             logger.info("Trying fallback JWKS URL")
             try:
-                return get_clerk_jwks(issuer=None)  # Try default URL
+                return await get_clerk_jwks(issuer=None)  # Try default URL
             except:
                 pass
         # Return cached JWKS if available
@@ -96,7 +98,7 @@ def get_clerk_jwks(issuer: str = None):
         if issuer and jwks_url != DEFAULT_CLERK_JWKS_URL:
             logger.info("Trying fallback JWKS URL")
             try:
-                return get_clerk_jwks(issuer=None)  # Try default URL
+                return await get_clerk_jwks(issuer=None)  # Try default URL
             except:
                 pass
         # Return cached JWKS if available
@@ -123,7 +125,7 @@ def get_clerk_jwks(issuer: str = None):
         )
 
 
-def verify_clerk_token(token: str) -> dict:
+async def verify_clerk_token(token: str) -> dict:
     """
     Verify a Clerk JWT token and return the decoded payload.
     
@@ -154,7 +156,7 @@ def verify_clerk_token(token: str) -> dict:
         
         # Get Clerk's public keys - use issuer-specific JWKS endpoint
         # The JWKS endpoint is typically at {issuer}/.well-known/jwks.json
-        jwks = get_clerk_jwks(issuer=issuer if issuer else None)
+        jwks = await get_clerk_jwks(issuer=issuer if issuer else None)
         
         # Decode token header to get key ID
         unverified_header = jwt.get_unverified_header(token)
@@ -227,7 +229,7 @@ def verify_clerk_token(token: str) -> dict:
         )
 
 
-def get_current_user(
+async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> str:
     """
@@ -266,7 +268,7 @@ def get_current_user(
     
     try:
         # Verify token and get payload
-        payload = verify_clerk_token(token)
+        payload = await verify_clerk_token(token)
         
         # Extract user ID from token
         # Clerk uses 'sub' claim for user ID

@@ -40,7 +40,7 @@ except ImportError:
 security = HTTPBearer(auto_error=False)
 
 
-def verify_token_with_sdk(token: str) -> dict:
+async def verify_token_with_sdk(token: str) -> dict:
     """Verify token using Clerk SDK"""
     if not clerk_client:
         raise HTTPException(
@@ -51,7 +51,10 @@ def verify_token_with_sdk(token: str) -> dict:
     try:
         # Clerk SDK verification - the SDK handles JWT verification internally
         # We need to verify the session token
-        session = clerk_client.verify_token(token)
+        # Note: Clerk SDK verify_token is synchronous, but we wrap it to avoid blocking
+        import asyncio
+        loop = asyncio.get_event_loop()
+        session = await loop.run_in_executor(None, clerk_client.verify_token, token)
         
         # Extract user ID from session
         if hasattr(session, 'user_id'):
@@ -67,10 +70,10 @@ def verify_token_with_sdk(token: str) -> dict:
         logger.warning(f"Clerk SDK verification failed: {str(e)}")
         # Fallback to manual verification
         from auth.clerk_auth import verify_clerk_token
-        return verify_clerk_token(token)
+        return await verify_clerk_token(token)
 
 
-def get_current_user_production(
+async def get_current_user_production(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> str:
     """
@@ -97,11 +100,11 @@ def get_current_user_production(
     try:
         # Try SDK first if available
         if CLERK_SDK_AVAILABLE and clerk_client:
-            payload = verify_token_with_sdk(token)
+            payload = await verify_token_with_sdk(token)
         else:
             # Fallback to manual verification
             from auth.clerk_auth import verify_clerk_token
-            payload = verify_clerk_token(token)
+            payload = await verify_clerk_token(token)
         
         # Extract user ID from token
         user_id = payload.get("sub") or payload.get("userId") or payload.get("user_id")

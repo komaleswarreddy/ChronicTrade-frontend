@@ -14,7 +14,11 @@ This replaces the previous Node.js/Express setup to better support
 the intelligent trading features and agent-based architecture.
 """
 
-from fastapi import FastAPI, HTTPException, Depends, status, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, status, Request, BackgroundTasks, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+# Security scheme for auth bypass
+security = HTTPBearer(auto_error=False)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import psycopg2
@@ -23,6 +27,9 @@ import os
 import logging
 import uuid
 import json
+import time
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, List, Dict
 from datetime import datetime, timedelta
 from pydantic import BaseModel
@@ -69,10 +76,27 @@ from middleware.logging_middleware import LoggingMiddleware, log_authentication_
 # Import authentication - try production auth, fallback to basic
 try:
     from auth.clerk_verify import get_current_user_production
-    get_authenticated_user = get_current_user_production
+    _get_authenticated_user_sync = get_current_user_production
 except (ImportError, AttributeError):
     from auth.clerk_auth import get_current_user
-    get_authenticated_user = get_current_user
+    _get_authenticated_user_sync = get_current_user
+
+# Make auth async-compatible
+async def get_authenticated_user(*args, **kwargs):
+    """Wrapper to ensure auth is async"""
+    return await _get_authenticated_user_sync(*args, **kwargs)
+
+# Environment-based auth bypass for testing
+ENV = os.getenv("ENV", "development")
+
+async def bypass_auth_for_testing(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+    """Temporary bypass for debugging - remove after fixing"""
+    if ENV == "production":
+        # Use real auth in production
+        return await get_authenticated_user(credentials)
+    # Return test user for debugging
+    logger.warning("⚠️ AUTH BYPASSED - Using test user (development mode)")
+    return "test_user_debug"
 
 from services.portfolio_service import calculate_portfolio_summary
 from services.snapshot_service import get_portfolio_trend, create_portfolio_snapshot
@@ -224,6 +248,21 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+# Request tracing middleware (for debugging timeouts)
+@app.middleware("http")
+async def trace_requests(request: Request, call_next):
+    start_time = time.time()
+    print(f"➡️ START {request.method} {request.url.path}")
+    try:
+        response = await call_next(request)
+        elapsed = time.time() - start_time
+        print(f"⬅️ END {request.url.path} {response.status_code} ({elapsed:.3f}s)")
+        return response
+    except Exception as e:
+        elapsed = time.time() - start_time
+        print(f"❌ ERROR {request.url.path} {type(e).__name__} ({elapsed:.3f}s)")
+        raise
+
 # Logging middleware for audit trail
 app.add_middleware(LoggingMiddleware)
 
@@ -235,6 +274,9 @@ DATABASE_URL = os.getenv('DATABASE_URL')
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL environment variable is required. Please set it in your .env file")
 
+# Thread pool executor for blocking DB operations
+db_executor = ThreadPoolExecutor(max_workers=10)
+
 def get_db_connection():
     """Get PostgreSQL database connection"""
     try:
@@ -242,6 +284,19 @@ def get_db_connection():
         return conn
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
+
+async def get_db_connection_async():
+    """Get DB connection in thread pool to avoid blocking event loop"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(db_executor, get_db_connection)
+
+async def with_timeout(coro, timeout_seconds=10, error_msg="Operation timed out"):
+    """Wrap async operation with timeout"""
+    try:
+        return await asyncio.wait_for(coro, timeout=timeout_seconds)
+    except asyncio.TimeoutError:
+        logger.error(f"{error_msg} after {timeout_seconds}s")
+        raise HTTPException(status_code=504, detail=error_msg)
 
 @app.get("/api/health")
 async def health_check():
@@ -256,24 +311,63 @@ async def health_check():
     except Exception as e:
         return {"ok": False, "database": "disconnected", "error": str(e)}
 
+# Test endpoints for debugging timeouts
+@app.get("/api/test/no-auth")
+async def test_no_auth():
+    """Test endpoint without auth"""
+    return {"status": "route alive", "auth": "none"}
+
+@app.get("/api/test/with-auth")
+async def test_with_auth(user_id: str = Depends(get_authenticated_user)):
+    """Test endpoint with auth"""
+    return {"status": "route alive", "auth": "passed", "user_id": user_id}
+
+@app.get("/api/test/db")
+async def test_db():
+    """Test endpoint with DB but no auth"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+        cursor.close()
+        conn.close()
+        return {"status": "db connected"}
+    except Exception as e:
+        return {"status": "db error", "error": str(e)}
+
+@app.get("/api/test/auth-bypass")
+async def test_auth_bypass(user_id: str = Depends(bypass_auth_for_testing)):
+    """Test endpoint with auth bypass"""
+    return {"status": "route alive", "auth": "bypassed", "user_id": user_id}
+
 @app.get("/api/portfolio/summary", response_model=PortfolioSummaryResponse)
 async def get_portfolio_summary(user_id: str = Depends(get_authenticated_user)):
     """Get portfolio summary for authenticated user"""
+    conn = None
     try:
-        conn = get_db_connection()
+        # Use async DB connection to avoid blocking
+        loop = asyncio.get_event_loop()
+        conn = await loop.run_in_executor(db_executor, get_db_connection)
         
-        # Ensure user has initialized portfolio (for new users)
-        ensure_user_portfolio_initialized(conn, user_id)
+        # Run blocking operations in thread pool
+        def run_portfolio_ops():
+            # Ensure user has initialized portfolio (for new users)
+            ensure_user_portfolio_initialized(conn, user_id)
+            
+            # Calculate portfolio summary dynamically
+            summary = calculate_portfolio_summary(conn, user_id)
+            
+            # Ensure today's snapshot exists for trend chart (always up-to-date)
+            ensure_snapshot_exists(conn, user_id)
+            
+            return summary
         
-        # Calculate portfolio summary dynamically
-        summary = calculate_portfolio_summary(conn, user_id)
-        
-        # Ensure today's snapshot exists for trend chart (always up-to-date)
-        ensure_snapshot_exists(conn, user_id)
+        summary = await loop.run_in_executor(db_executor, run_portfolio_ops)
         
         log_portfolio_access(user_id, "/api/portfolio/summary", True)
         
-        conn.close()
+        if conn:
+            await loop.run_in_executor(db_executor, conn.close)
         return PortfolioSummaryResponse(**summary)
     except HTTPException:
         raise
@@ -359,28 +453,38 @@ async def get_portfolio_holdings(user_id: str = Depends(get_authenticated_user))
 @app.get("/api/market/pulse")
 async def get_market_pulse():
     """Get market pulse by region (public endpoint - no auth required)"""
+    conn = None
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        # Use async DB connection to avoid blocking
+        loop = asyncio.get_event_loop()
+        conn = await loop.run_in_executor(db_executor, get_db_connection)
+        cursor = await loop.run_in_executor(
+            db_executor,
+            lambda: conn.cursor(cursor_factory=RealDictCursor)
+        )
         
         # Get latest prices for each region
         today = datetime.now().strftime('%Y-%m-%d')
         yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
         
-        cursor.execute("""
-            SELECT 
-                a.region,
-                AVG(CASE WHEN ph.date = %s THEN ph.price ELSE NULL END) as today_price,
-                AVG(CASE WHEN ph.date = %s THEN ph.price ELSE NULL END) as yesterday_price
-            FROM assets a
-            LEFT JOIN price_history ph ON a.asset_id = ph.asset_id AND a.region = ph.region
-            WHERE ph.date IN (%s, %s)
-            GROUP BY a.region
-        """, (today, yesterday, today, yesterday))
+        # Run query in thread pool
+        def execute_query():
+            cursor.execute("""
+                SELECT 
+                    a.region,
+                    AVG(CASE WHEN ph.date = %s THEN ph.price ELSE NULL END) as today_price,
+                    AVG(CASE WHEN ph.date = %s THEN ph.price ELSE NULL END) as yesterday_price
+                FROM assets a
+                LEFT JOIN price_history ph ON a.asset_id = ph.asset_id AND a.region = ph.region
+                WHERE ph.date IN (%s, %s)
+                GROUP BY a.region
+            """, (today, yesterday, today, yesterday))
+            return cursor.fetchall()
         
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
+        rows = await loop.run_in_executor(db_executor, execute_query)
+        
+        await loop.run_in_executor(db_executor, cursor.close)
+        await loop.run_in_executor(db_executor, conn.close)
         
         pulse = {}
         for row in rows:
@@ -394,6 +498,9 @@ async def get_market_pulse():
         
         return pulse
     except Exception as e:
+        if conn:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(db_executor, conn.close)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/arbitrage", response_model=List[ArbitrageOpportunityResponse])
@@ -447,29 +554,43 @@ async def get_arbitrage_opportunities(limit: int = 10):
 @app.get("/api/portfolio/trend")
 async def get_portfolio_trend_endpoint(user_id: str = Depends(get_authenticated_user), days: int = 30):
     """Get portfolio trend data for authenticated user"""
+    conn = None
     try:
-        conn = get_db_connection()
-        
         # Ensure user_id is validated
         if not user_id or user_id.strip() == "":
             raise HTTPException(status_code=401, detail="Invalid user ID")
         
-        # Ensure user has initialized portfolio
-        ensure_user_portfolio_initialized(conn, user_id)
+        # Use async DB connection to avoid blocking
+        loop = asyncio.get_event_loop()
+        conn = await loop.run_in_executor(db_executor, get_db_connection)
         
-        # Ensure snapshot exists before fetching trend
-        ensure_snapshot_exists(conn, user_id)
+        # Run blocking operations in thread pool
+        def run_trend_ops():
+            # Ensure user has initialized portfolio
+            ensure_user_portfolio_initialized(conn, user_id)
+            
+            # Ensure snapshot exists before fetching trend
+            ensure_snapshot_exists(conn, user_id)
+            
+            # Get trend data from snapshots (ensures today's snapshot exists)
+            return get_portfolio_trend(conn, user_id, days, ensure_today=True)
         
-        # Get trend data from snapshots (ensures today's snapshot exists)
-        trend_data = get_portfolio_trend(conn, user_id, days, ensure_today=True)
+        trend_data = await loop.run_in_executor(db_executor, run_trend_ops)
         
         log_portfolio_access(user_id, "/api/portfolio/trend", True)
         
-        conn.close()
+        if conn:
+            await loop.run_in_executor(db_executor, conn.close)
         return trend_data
     except HTTPException:
+        if conn:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(db_executor, conn.close)
         raise
     except Exception as e:
+        if conn:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(db_executor, conn.close)
         log_portfolio_access(user_id, "/api/portfolio/trend", False)
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -492,8 +613,13 @@ async def get_alerts(
         if limit < 1 or limit > 100:
             limit = 20
         
-        conn = get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        # Use async DB connection to avoid blocking
+        loop = asyncio.get_event_loop()
+        conn = await loop.run_in_executor(db_executor, get_db_connection)
+        cursor = await loop.run_in_executor(
+            db_executor,
+            lambda: conn.cursor(cursor_factory=RealDictCursor)
+        )
         
         # Get alerts for user's holdings (alerts related to assets user owns)
         # Also include general alerts (where asset_id is NULL)
@@ -505,37 +631,40 @@ async def get_alerts(
         # Query alerts for user's watchlist and holdings
         # Note: Using DISTINCT is not needed here since alerts are unique by id
         # and we're filtering by user-specific watchlist/holdings
-        cursor.execute("""
-            SELECT
-                a.id,
-                a.type,
-                a.message,
-                a.severity,
-                a.asset_id,
-                a.value,
-                a.threshold,
-                a.explanation,
-                a.created_at,
-                COALESCE(a.read, FALSE) as read
-            FROM alerts a
-            WHERE (
-                a.asset_id IS NULL 
-                OR a.asset_id IN (SELECT asset_id FROM holdings WHERE user_id = %s)
-                OR a.asset_id IN (SELECT asset_id FROM watchlists WHERE user_id = %s)
-            )
-            ORDER BY 
-                CASE a.severity
-                    WHEN 'critical' THEN 4
-                    WHEN 'high' THEN 3
-                    WHEN 'medium' THEN 2
-                    WHEN 'low' THEN 1
-                    ELSE 0
-                END DESC,
-                a.created_at DESC NULLS LAST
-            LIMIT %s OFFSET %s
-        """, (user_id, user_id, limit, offset))
+        # Run query in thread pool to avoid blocking
+        def execute_query():
+            cursor.execute("""
+                SELECT
+                    a.id,
+                    a.type,
+                    a.message,
+                    a.severity,
+                    a.asset_id,
+                    a.value,
+                    a.threshold,
+                    a.explanation,
+                    a.created_at,
+                    COALESCE(a.read, FALSE) as read
+                FROM alerts a
+                WHERE (
+                    a.asset_id IS NULL 
+                    OR a.asset_id IN (SELECT asset_id FROM holdings WHERE user_id = %s)
+                    OR a.asset_id IN (SELECT asset_id FROM watchlists WHERE user_id = %s)
+                )
+                ORDER BY 
+                    CASE a.severity
+                        WHEN 'critical' THEN 4
+                        WHEN 'high' THEN 3
+                        WHEN 'medium' THEN 2
+                        WHEN 'low' THEN 1
+                        ELSE 0
+                    END DESC,
+                    a.created_at DESC NULLS LAST
+                LIMIT %s OFFSET %s
+            """, (user_id, user_id, limit, offset))
+            return cursor.fetchall()
         
-        rows = cursor.fetchall()
+        rows = await loop.run_in_executor(db_executor, execute_query)
         logger.info(f"Found {len(rows)} alerts for user {user_id}")
         
         alerts = []
@@ -595,15 +724,16 @@ async def get_alerts(
         # Return empty list instead of 500 error - graceful degradation
         return []
     finally:
-        # Ensure database connections are always closed
+        # Ensure database connections are always closed (async)
+        loop = asyncio.get_event_loop()
         if cursor:
             try:
-                cursor.close()
+                await loop.run_in_executor(db_executor, cursor.close)
             except Exception:
                 pass
         if conn:
             try:
-                conn.close()
+                await loop.run_in_executor(db_executor, conn.close)
             except Exception:
                 pass
 
