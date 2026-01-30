@@ -1,11 +1,12 @@
 import axios from "axios";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
+// Support both NEXT_PUBLIC_API_BASE and NEXT_PUBLIC_API_BASE_URL for compatibility
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE;
 
 if (!API_BASE) {
   throw new Error(
-    "NEXT_PUBLIC_API_BASE is not defined. Refusing to start frontend. " +
-    "Please set NEXT_PUBLIC_API_BASE in your .env.local file."
+    "NEXT_PUBLIC_API_BASE_URL or NEXT_PUBLIC_API_BASE is not defined. Refusing to start frontend. " +
+    "Please set NEXT_PUBLIC_API_BASE_URL in your Render environment variables or NEXT_PUBLIC_API_BASE in .env.local file."
   );
 }
 
