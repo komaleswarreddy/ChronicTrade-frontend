@@ -41,7 +41,25 @@ export default function CapitalSummaryPanel({ getToken }) {
       setExposure(exposureRes.data)
     } catch (err) {
       console.error('Failed to fetch capital data:', err)
-      setError(err.response?.data?.detail || err.message || 'Failed to fetch capital data')
+      // Handle different error formats - ensure we always get a string
+      let errorMessage = 'Failed to fetch capital data'
+      if (err.response?.data) {
+        const data = err.response.data
+        if (typeof data.detail === 'string') {
+          errorMessage = data.detail
+        } else if (Array.isArray(data.detail)) {
+          // Pydantic validation errors are arrays
+          errorMessage = data.detail.map(e => e.msg || JSON.stringify(e)).join(', ')
+        } else if (typeof data.detail === 'object') {
+          // Convert object to string
+          errorMessage = JSON.stringify(data.detail)
+        } else if (typeof data === 'string') {
+          errorMessage = data
+        }
+      } else if (err.message) {
+        errorMessage = err.message
+      }
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
