@@ -44,14 +44,19 @@ print(f"🌐 Starting server on http://{host}:{port}")
 print(f"📚 API docs will be available at http://{host}:{port}/docs")
 print("-" * 50)
 
-# Start the server
+# CRITICAL: Start server immediately to bind to port
+# This ensures Render detects the open port before timeout
 try:
+    # Use reload=False for production (Render)
+    # This ensures faster startup and immediate port binding
     uvicorn.run(
         "main:app",
         host=host,
         port=port,
         log_level="info",
-        access_log=True
+        access_log=True,
+        reload=False,  # Disable reload in production
+        loop="asyncio"  # Use asyncio event loop
     )
 except Exception as e:
     print(f"❌ ERROR: Server failed to start: {e}")

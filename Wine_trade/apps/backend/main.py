@@ -215,34 +215,43 @@ except ImportError:  # pragma: no cover
         return None
 
 # Auto-run migrations on startup (for Render.com and other cloud deployments)
-# This allows migrations to run automatically without needing shell access
-if os.getenv("ENV") == "production":
+# CRITICAL: Run migrations in background to avoid blocking port binding
+# Server must bind to port immediately for Render deployment
+import threading
+
+def run_migrations_async():
+    """Run migrations in background thread to avoid blocking startup"""
     try:
-        # Verify DATABASE_URL is set
         database_url = os.getenv("DATABASE_URL")
         if not database_url:
             print("⚠️ [Startup] DATABASE_URL not set - skipping migrations")
-        else:
-            # Mask password in logs for security
-            masked_url = database_url.split("@")[0].split(":")[0] + ":***@" + "@".join(database_url.split("@")[1:]) if "@" in database_url else "***"
-            print(f"🔄 [Startup] Running database migrations... (DB: {masked_url})")
-            
-            import sys
-            from pathlib import Path
-            # Add database directory to path
-            database_dir = Path(__file__).parent / "database"
-            if str(database_dir) not in sys.path:
-                sys.path.insert(0, str(database_dir))
-            
-            from run_migrations import main as migrate_main
-            migrate_main()
-            print("✅ [Startup] Migrations completed successfully!")
+            return
+        
+        # Mask password in logs for security
+        masked_url = database_url.split("@")[0].split(":")[0] + ":***@" + "@".join(database_url.split("@")[1:]) if "@" in database_url else "***"
+        print(f"🔄 [Startup] Running database migrations in background... (DB: {masked_url})")
+        
+        import sys
+        from pathlib import Path
+        # Add database directory to path
+        database_dir = Path(__file__).parent / "database"
+        if str(database_dir) not in sys.path:
+            sys.path.insert(0, str(database_dir))
+        
+        from run_migrations import main as migrate_main
+        migrate_main()
+        print("✅ [Startup] Migrations completed successfully!")
     except Exception as e:
         # Don't fail startup if migrations fail (might already be run, or non-critical)
         print(f"⚠️ [Startup] Migration warning (non-critical): {e}")
         print("⚠️ [Startup] Continuing startup - migrations may already be applied")
-        import traceback
-        print(f"⚠️ [Startup] Traceback: {traceback.format_exc()}")
+
+# Run migrations in background thread (non-blocking) - CRITICAL for Render deployment
+# This ensures server binds to port immediately
+if os.getenv("ENV") == "production":
+    migration_thread = threading.Thread(target=run_migrations_async, daemon=True)
+    migration_thread.start()
+    print("🚀 [Startup] Server starting immediately - migrations running in background")
 
 app = FastAPI(
     title="ChronoShift API", 
@@ -291,22 +300,14 @@ app.add_middleware(LoggingMiddleware)
 # Configure logger for this module
 logger = logging.getLogger("chronoshift.api")
 
-# Pre-load RAG model on startup to avoid first-query delay
+# RAG model will load lazily on first use to avoid blocking startup
+# This ensures the server binds to port immediately for Render deployment
+# The first RAG query will be slightly slower, but server startup is critical
 @app.on_event("startup")
-async def preload_rag_model():
-    """Pre-load RAG model on server startup to avoid first-query delay"""
-    try:
-        logger.info("[Startup] Pre-loading RAG embedding model...")
-        from rag.retriever import RAGRetriever
-        # Create a retriever instance to trigger model loading
-        retriever = RAGRetriever()
-        if retriever.model is not None:
-            logger.info("[Startup] ✅ RAG model pre-loaded successfully")
-        else:
-            logger.warning("[Startup] ⚠️ RAG model not available (sentence-transformers not installed)")
-    except Exception as e:
-        logger.warning(f"[Startup] ⚠️ Failed to pre-load RAG model (non-critical): {e}")
-        logger.warning("[Startup] RAG queries will still work, but first query may be slower")
+async def startup_message():
+    """Startup event - server is ready"""
+    logger.info("[Startup] ✅ ChronoShift API server is ready")
+    logger.info("[Startup] RAG model will load on first query (lazy loading)")
 
 DATABASE_URL = os.getenv('DATABASE_URL')
 
