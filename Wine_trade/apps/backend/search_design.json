@@ -1,0 +1,897 @@
+{
+  "search_indexes": {
+    "asset_index": {
+      "type": "composite",
+      "fields": ["asset_id", "asset_name", "region", "wine_type", "vintage"],
+      "index_structure": {
+        "asset_id": "primary_key",
+        "asset_name": "btree_index",
+        "region": "btree_index",
+        "wine_type": "btree_index",
+        "vintage": "btree_index"
+      },
+      "query_optimization": "enables O(log n) lookups on any combination of fields"
+    },
+    "price_index": {
+      "type": "composite",
+      "fields": ["asset_id", "date", "price", "region"],
+      "index_structure": {
+        "asset_id": "foreign_key",
+        "date": "btree_index",
+        "price": "btree_index",
+        "region": "btree_index"
+      },
+      "query_optimization": "enables fast price range queries and time-series lookups"
+    },
+    "trend_index": {
+      "type": "composite",
+      "fields": ["asset_id", "trend", "confidence", "date"],
+      "index_structure": {
+        "asset_id": "foreign_key",
+        "trend": "btree_index",
+        "confidence": "btree_index",
+        "date": "btree_index"
+      },
+      "query_optimization": "enables fast filtering by trend direction and confidence threshold"
+    },
+    "portfolio_index": {
+      "type": "composite",
+      "fields": ["owner_id", "asset_id", "roi", "current_value", "purchase_price"],
+      "index_structure": {
+        "owner_id": "foreign_key",
+        "asset_id": "foreign_key",
+        "roi": "btree_index",
+        "current_value": "btree_index"
+      },
+      "query_optimization": "enables fast portfolio filtering by ROI and value"
+    },
+    "arbitrage_index": {
+      "type": "composite",
+      "fields": ["asset_id", "buy_region", "sell_region", "expected_profit", "confidence"],
+      "index_structure": {
+        "asset_id": "foreign_key",
+        "buy_region": "btree_index",
+        "sell_region": "btree_index",
+        "expected_profit": "btree_index",
+        "confidence": "btree_index"
+      },
+      "query_optimization": "enables fast arbitrage opportunity discovery"
+    },
+    "alert_index": {
+      "type": "composite",
+      "fields": ["alert_id", "type", "severity", "asset_id", "created_at"],
+      "index_structure": {
+        "alert_id": "primary_key",
+        "type": "btree_index",
+        "severity": "btree_index",
+        "asset_id": "foreign_key",
+        "created_at": "btree_index"
+      },
+      "query_optimization": "enables fast alert filtering and sorting"
+    },
+    "full_text_search_index": {
+      "type": "gin",
+      "fields": ["asset_name", "producer", "region"],
+      "index_structure": {
+        "asset_name": "gin_trgm_ops",
+        "producer": "gin_trgm_ops",
+        "region": "gin_trgm_ops"
+      },
+      "query_optimization": "enables fast partial text matching with trigram similarity"
+    }
+  },
+  "api_contracts": {
+    "market_search": {
+      "endpoint": "/api/search/market",
+      "method": "GET",
+      "query_params": {
+        "q": {
+          "type": "string",
+          "description": "Search query for asset name (partial match)",
+          "required": false,
+          "example": "Château"
+        },
+        "region": {
+          "type": "string",
+          "description": "Filter by region",
+          "required": false,
+          "example": "Bordeaux"
+        },
+        "wine_type": {
+          "type": "string",
+          "description": "Filter by wine type",
+          "required": false,
+          "example": "Red"
+        },
+        "vintage": {
+          "type": "integer",
+          "description": "Filter by vintage year",
+          "required": false,
+          "example": 2015
+        },
+        "min_price": {
+          "type": "number",
+          "description": "Minimum price filter",
+          "required": false,
+          "example": 100
+        },
+        "max_price": {
+          "type": "number",
+          "description": "Maximum price filter",
+          "required": false,
+          "example": 1000
+        },
+        "trend": {
+          "type": "string",
+          "description": "Filter by trend direction",
+          "required": false,
+          "enum": ["up", "down", "stable"],
+          "example": "up"
+        },
+        "min_confidence": {
+          "type": "number",
+          "description": "Minimum confidence threshold (0-1)",
+          "required": false,
+          "example": 0.7
+        },
+        "sort": {
+          "type": "string",
+          "description": "Sort order",
+          "required": false,
+          "enum": ["price_asc", "price_desc", "profit_desc", "latest_date", "confidence_desc"],
+          "default": "latest_date",
+          "example": "price_desc"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number for pagination",
+          "required": false,
+          "default": 1,
+          "example": 1
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Results per page",
+          "required": false,
+          "default": 20,
+          "max": 100,
+          "example": 20
+        }
+      },
+      "response_fields": [
+        "asset_id",
+        "asset_name",
+        "producer",
+        "vintage",
+        "region",
+        "wine_type",
+        "latest_price",
+        "price_change",
+        "price_change_percent",
+        "trend",
+        "confidence",
+        "last_updated",
+        "volume_24h"
+      ],
+      "response_structure": {
+        "success": "boolean",
+        "data": "array",
+        "pagination": {
+          "page": "integer",
+          "limit": "integer",
+          "total": "integer",
+          "total_pages": "integer"
+        },
+        "query_time_ms": "number"
+      }
+    },
+    "portfolio_search": {
+      "endpoint": "/api/search/portfolio",
+      "method": "GET",
+      "query_params": {
+        "owner_id": {
+          "type": "string",
+          "description": "Owner/user ID",
+          "required": true,
+          "example": "demo-user"
+        },
+        "q": {
+          "type": "string",
+          "description": "Search query for asset name",
+          "required": false,
+          "example": "Margaux"
+        },
+        "min_roi": {
+          "type": "number",
+          "description": "Minimum ROI percentage",
+          "required": false,
+          "example": 10
+        },
+        "max_roi": {
+          "type": "number",
+          "description": "Maximum ROI percentage",
+          "required": false,
+          "example": 50
+        },
+        "trend": {
+          "type": "string",
+          "description": "Filter by trend direction",
+          "required": false,
+          "enum": ["up", "down", "stable"],
+          "example": "up"
+        },
+        "min_value": {
+          "type": "number",
+          "description": "Minimum current value",
+          "required": false,
+          "example": 500
+        },
+        "max_value": {
+          "type": "number",
+          "description": "Maximum current value",
+          "required": false,
+          "example": 5000
+        },
+        "sort": {
+          "type": "string",
+          "description": "Sort order",
+          "required": false,
+          "enum": ["roi_desc", "roi_asc", "value_desc", "value_asc", "added_at_desc"],
+          "default": "roi_desc",
+          "example": "roi_desc"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Results per page",
+          "required": false,
+          "default": 20,
+          "max": 100
+        }
+      },
+      "response_fields": [
+        "holding_id",
+        "asset_id",
+        "asset_name",
+        "producer",
+        "vintage",
+        "region",
+        "qty",
+        "purchase_price",
+        "current_value",
+        "total_value",
+        "roi",
+        "roi_percent",
+        "profit_loss",
+        "trend",
+        "added_at"
+      ],
+      "response_structure": {
+        "success": "boolean",
+        "data": "array",
+        "pagination": {
+          "page": "integer",
+          "limit": "integer",
+          "total": "integer",
+          "total_pages": "integer"
+        },
+        "summary": {
+          "total_holdings": "integer",
+          "total_value": "number",
+          "total_profit_loss": "number",
+          "average_roi": "number"
+        },
+        "query_time_ms": "number"
+      }
+    },
+    "arbitrage_search": {
+      "endpoint": "/api/search/arbitrage",
+      "method": "GET",
+      "query_params": {
+        "q": {
+          "type": "string",
+          "description": "Search query for asset name",
+          "required": false,
+          "example": "Lafite"
+        },
+        "min_profit": {
+          "type": "number",
+          "description": "Minimum expected profit",
+          "required": false,
+          "example": 100
+        },
+        "max_profit": {
+          "type": "number",
+          "description": "Maximum expected profit",
+          "required": false,
+          "example": 10000
+        },
+        "buy_region": {
+          "type": "string",
+          "description": "Filter by buy region",
+          "required": false,
+          "example": "Bordeaux"
+        },
+        "sell_region": {
+          "type": "string",
+          "description": "Filter by sell region",
+          "required": false,
+          "example": "London"
+        },
+        "min_confidence": {
+          "type": "number",
+          "description": "Minimum confidence threshold (0-1)",
+          "required": false,
+          "example": 0.7
+        },
+        "sort": {
+          "type": "string",
+          "description": "Sort order",
+          "required": false,
+          "enum": ["profit_desc", "profit_asc", "confidence_desc", "profit_margin_desc"],
+          "default": "profit_desc",
+          "example": "profit_desc"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Results per page",
+          "required": false,
+          "default": 20,
+          "max": 100
+        }
+      },
+      "response_fields": [
+        "opportunity_id",
+        "asset_id",
+        "asset_name",
+        "producer",
+        "vintage",
+        "buy_region",
+        "buy_price",
+        "sell_region",
+        "sell_price",
+        "expected_profit",
+        "profit_margin",
+        "confidence",
+        "volume_available",
+        "last_updated"
+      ],
+      "response_structure": {
+        "success": "boolean",
+        "data": "array",
+        "pagination": {
+          "page": "integer",
+          "limit": "integer",
+          "total": "integer",
+          "total_pages": "integer"
+        },
+        "query_time_ms": "number"
+      }
+    },
+    "alerts_search": {
+      "endpoint": "/api/search/alerts",
+      "method": "GET",
+      "query_params": {
+        "owner_id": {
+          "type": "string",
+          "description": "Owner/user ID",
+          "required": false,
+          "example": "demo-user"
+        },
+        "type": {
+          "type": "string",
+          "description": "Filter by alert type",
+          "required": false,
+          "enum": ["price_drop", "price_spike", "arbitrage", "portfolio_alert", "market_alert"],
+          "example": "price_drop"
+        },
+        "severity": {
+          "type": "string",
+          "description": "Filter by severity",
+          "required": false,
+          "enum": ["low", "medium", "high", "critical"],
+          "example": "high"
+        },
+        "asset_id": {
+          "type": "string",
+          "description": "Filter by asset ID",
+          "required": false,
+          "example": "uuid"
+        },
+        "min_severity": {
+          "type": "string",
+          "description": "Minimum severity level",
+          "required": false,
+          "enum": ["low", "medium", "high", "critical"],
+          "example": "medium"
+        },
+        "sort": {
+          "type": "string",
+          "description": "Sort order",
+          "required": false,
+          "enum": ["severity_desc", "created_at_desc", "created_at_asc"],
+          "default": "created_at_desc",
+          "example": "severity_desc"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Results per page",
+          "required": false,
+          "default": 20,
+          "max": 100
+        }
+      },
+      "response_fields": [
+        "alert_id",
+        "type",
+        "severity",
+        "message",
+        "asset_id",
+        "asset_name",
+        "value",
+        "threshold",
+        "created_at",
+        "read"
+      ],
+      "response_structure": {
+        "success": "boolean",
+        "data": "array",
+        "pagination": {
+          "page": "integer",
+          "limit": "integer",
+          "total": "integer",
+          "total_pages": "integer"
+        },
+        "unread_count": "integer",
+        "query_time_ms": "number"
+      }
+    },
+    "market_pulse": {
+      "endpoint": "/api/search/market-pulse",
+      "method": "GET",
+      "query_params": {
+        "region": {
+          "type": "string",
+          "description": "Filter by region",
+          "required": false,
+          "example": "Bordeaux"
+        },
+        "wine_type": {
+          "type": "string",
+          "description": "Filter by wine type",
+          "required": false,
+          "example": "Red"
+        },
+        "date_from": {
+          "type": "string",
+          "description": "Start date (ISO 8601)",
+          "required": false,
+          "example": "2024-01-01"
+        },
+        "date_to": {
+          "type": "string",
+          "description": "End date (ISO 8601)",
+          "required": false,
+          "example": "2024-12-31"
+        }
+      },
+      "response_fields": [
+        "region",
+        "wine_type",
+        "total_assets",
+        "rising_count",
+        "falling_count",
+        "stable_count",
+        "average_price",
+        "average_confidence",
+        "top_risers",
+        "top_fallers",
+        "last_updated"
+      ],
+      "response_structure": {
+        "success": "boolean",
+        "data": "object",
+        "query_time_ms": "number"
+      }
+    }
+  },
+  "example_queries": {
+    "search_wines_by_name": {
+      "endpoint": "/api/search/market",
+      "query_params": {
+        "q": "Château",
+        "sort": "price_desc",
+        "page": 1,
+        "limit": 20
+      },
+      "description": "Search wines by partial name match, sorted by price descending"
+    },
+    "top_rising_wines": {
+      "endpoint": "/api/search/market",
+      "query_params": {
+        "trend": "up",
+        "min_confidence": 0.7,
+        "sort": "profit_desc",
+        "page": 1,
+        "limit": 10
+      },
+      "description": "Find top rising wines with high confidence"
+    },
+    "top_falling_wines": {
+      "endpoint": "/api/search/market",
+      "query_params": {
+        "trend": "down",
+        "min_confidence": 0.7,
+        "sort": "profit_desc",
+        "page": 1,
+        "limit": 10
+      },
+      "description": "Find top falling wines with high confidence"
+    },
+    "arbitrage_above_profit": {
+      "endpoint": "/api/search/arbitrage",
+      "query_params": {
+        "min_profit": 500,
+        "min_confidence": 0.75,
+        "sort": "profit_desc",
+        "page": 1,
+        "limit": 20
+      },
+      "description": "Find arbitrage opportunities with profit above 500 and high confidence"
+    },
+    "portfolio_by_roi": {
+      "endpoint": "/api/search/portfolio",
+      "query_params": {
+        "owner_id": "demo-user",
+        "min_roi": 15,
+        "sort": "roi_desc",
+        "page": 1,
+        "limit": 20
+      },
+      "description": "Filter portfolio holdings by minimum ROI of 15%, sorted by ROI descending"
+    },
+    "alerts_by_severity": {
+      "endpoint": "/api/search/alerts",
+      "query_params": {
+        "owner_id": "demo-user",
+        "severity": "high",
+        "sort": "severity_desc",
+        "page": 1,
+        "limit": 20
+      },
+      "description": "Get high severity alerts sorted by severity"
+    },
+    "market_pulse_by_region": {
+      "endpoint": "/api/search/market-pulse",
+      "query_params": {
+        "region": "Bordeaux"
+      },
+      "description": "Get market pulse analytics for Bordeaux region"
+    },
+    "price_range_search": {
+      "endpoint": "/api/search/market",
+      "query_params": {
+        "min_price": 200,
+        "max_price": 1000,
+        "region": "Burgundy",
+        "sort": "price_asc",
+        "page": 1,
+        "limit": 20
+      },
+      "description": "Search wines in price range 200-1000 in Burgundy region"
+    },
+    "vintage_filter": {
+      "endpoint": "/api/search/market",
+      "query_params": {
+        "vintage": 2015,
+        "wine_type": "Red",
+        "sort": "confidence_desc",
+        "page": 1,
+        "limit": 20
+      },
+      "description": "Filter 2015 vintage red wines sorted by confidence"
+    },
+    "date_range_search": {
+      "endpoint": "/api/search/market",
+      "query_params": {
+        "date_from": "2024-01-01",
+        "date_to": "2024-12-31",
+        "trend": "up",
+        "sort": "latest_date",
+        "page": 1,
+        "limit": 20
+      },
+      "description": "Search wines with upward trend in date range"
+    }
+  },
+  "example_responses": {
+    "market_search_response": {
+      "success": true,
+      "data": [
+        {
+          "asset_id": "550e8400-e29b-41d4-a716-446655440000",
+          "asset_name": "Château Margaux 2015",
+          "producer": "Château Margaux",
+          "vintage": 2015,
+          "region": "Bordeaux",
+          "wine_type": "Red",
+          "latest_price": 1250.00,
+          "price_change": 125.00,
+          "price_change_percent": 11.11,
+          "trend": "up",
+          "confidence": 0.85,
+          "last_updated": "2024-12-15T10:30:00Z",
+          "volume_24h": 5
+        },
+        {
+          "asset_id": "550e8400-e29b-41d4-a716-446655440001",
+          "asset_name": "Château Lafite Rothschild 2010",
+          "producer": "Château Lafite Rothschild",
+          "vintage": 2010,
+          "region": "Bordeaux",
+          "wine_type": "Red",
+          "latest_price": 2800.00,
+          "price_change": -150.00,
+          "price_change_percent": -5.08,
+          "trend": "down",
+          "confidence": 0.78,
+          "last_updated": "2024-12-15T09:45:00Z",
+          "volume_24h": 3
+        }
+      ],
+      "pagination": {
+        "page": 1,
+        "limit": 20,
+        "total": 45,
+        "total_pages": 3
+      },
+      "query_time_ms": 23
+    },
+    "portfolio_search_response": {
+      "success": true,
+      "data": [
+        {
+          "holding_id": "660e8400-e29b-41d4-a716-446655440000",
+          "asset_id": "550e8400-e29b-41d4-a716-446655440000",
+          "asset_name": "Château Margaux 2015",
+          "producer": "Château Margaux",
+          "vintage": 2015,
+          "region": "Bordeaux",
+          "qty": 2,
+          "purchase_price": 1000.00,
+          "current_value": 1250.00,
+          "total_value": 2500.00,
+          "roi": 500.00,
+          "roi_percent": 25.00,
+          "profit_loss": 500.00,
+          "trend": "up",
+          "added_at": "2024-01-15T08:00:00Z"
+        },
+        {
+          "holding_id": "660e8400-e29b-41d4-a716-446655440001",
+          "asset_id": "550e8400-e29b-41d4-a716-446655440002",
+          "asset_name": "Domaine de la Romanée-Conti 2018",
+          "producer": "Domaine de la Romanée-Conti",
+          "vintage": 2018,
+          "region": "Burgundy",
+          "qty": 1,
+          "purchase_price": 5000.00,
+          "current_value": 5200.00,
+          "total_value": 5200.00,
+          "roi": 200.00,
+          "roi_percent": 4.00,
+          "profit_loss": 200.00,
+          "trend": "up",
+          "added_at": "2024-02-20T10:30:00Z"
+        }
+      ],
+      "pagination": {
+        "page": 1,
+        "limit": 20,
+        "total": 12,
+        "total_pages": 1
+      },
+      "summary": {
+        "total_holdings": 12,
+        "total_value": 45000.00,
+        "total_profit_loss": 3500.00,
+        "average_roi": 8.47
+      },
+      "query_time_ms": 18
+    },
+    "arbitrage_search_response": {
+      "success": true,
+      "data": [
+        {
+          "opportunity_id": "770e8400-e29b-41d4-a716-446655440000",
+          "asset_id": "550e8400-e29b-41d4-a716-446655440000",
+          "asset_name": "Château Margaux 2015",
+          "producer": "Château Margaux",
+          "vintage": 2015,
+          "buy_region": "Bordeaux",
+          "buy_price": 1200.00,
+          "sell_region": "London",
+          "sell_price": 1350.00,
+          "expected_profit": 150.00,
+          "profit_margin": 12.50,
+          "confidence": 0.82,
+          "volume_available": 3,
+          "last_updated": "2024-12-15T11:00:00Z"
+        },
+        {
+          "opportunity_id": "770e8400-e29b-41d4-a716-446655440001",
+          "asset_id": "550e8400-e29b-41d4-a716-446655440003",
+          "asset_name": "Screaming Eagle 2016",
+          "producer": "Screaming Eagle",
+          "vintage": 2016,
+          "buy_region": "Napa Valley",
+          "buy_price": 3500.00,
+          "sell_region": "Hong Kong",
+          "sell_price": 4200.00,
+          "expected_profit": 700.00,
+          "profit_margin": 20.00,
+          "confidence": 0.75,
+          "volume_available": 1,
+          "last_updated": "2024-12-15T10:45:00Z"
+        }
+      ],
+      "pagination": {
+        "page": 1,
+        "limit": 20,
+        "total": 8,
+        "total_pages": 1
+      },
+      "query_time_ms": 31
+    },
+    "alerts_search_response": {
+      "success": true,
+      "data": [
+        {
+          "alert_id": "880e8400-e29b-41d4-a716-446655440000",
+          "type": "price_drop",
+          "severity": "high",
+          "message": "Château Margaux 2015 dropped 15% in the last 24 hours",
+          "asset_id": "550e8400-e29b-41d4-a716-446655440000",
+          "asset_name": "Château Margaux 2015",
+          "value": 1250.00,
+          "threshold": 1400.00,
+          "created_at": "2024-12-15T09:00:00Z",
+          "read": false
+        },
+        {
+          "alert_id": "880e8400-e29b-41d4-a716-446655440001",
+          "type": "arbitrage",
+          "severity": "medium",
+          "message": "New arbitrage opportunity: Château Lafite Rothschild 2010",
+          "asset_id": "550e8400-e29b-41d4-a716-446655440001",
+          "asset_name": "Château Lafite Rothschild 2010",
+          "value": 700.00,
+          "threshold": 500.00,
+          "created_at": "2024-12-15T08:30:00Z",
+          "read": false
+        }
+      ],
+      "pagination": {
+        "page": 1,
+        "limit": 20,
+        "total": 15,
+        "total_pages": 1
+      },
+      "unread_count": 12,
+      "query_time_ms": 15
+    },
+    "market_pulse_response": {
+      "success": true,
+      "data": {
+        "region": "Bordeaux",
+        "wine_type": "Red",
+        "total_assets": 45,
+        "rising_count": 18,
+        "falling_count": 12,
+        "stable_count": 15,
+        "average_price": 1850.50,
+        "average_confidence": 0.76,
+        "top_risers": [
+          {
+            "asset_id": "550e8400-e29b-41d4-a716-446655440000",
+            "asset_name": "Château Margaux 2015",
+            "price_change_percent": 11.11
+          },
+          {
+            "asset_id": "550e8400-e29b-41d4-a716-446655440004",
+            "asset_name": "Château Latour 2012",
+            "price_change_percent": 8.50
+          }
+        ],
+        "top_fallers": [
+          {
+            "asset_id": "550e8400-e29b-41d4-a716-446655440001",
+            "asset_name": "Château Lafite Rothschild 2010",
+            "price_change_percent": -5.08
+          },
+          {
+            "asset_id": "550e8400-e29b-41d4-a716-446655440005",
+            "asset_name": "Château Mouton Rothschild 2014",
+            "price_change_percent": -3.25
+          }
+        ],
+        "last_updated": "2024-12-15T12:00:00Z"
+      },
+      "query_time_ms": 42
+    }
+  },
+  "query_optimization_strategies": {
+    "index_usage": {
+      "description": "All queries use appropriate indexes for sub-50ms response times",
+      "strategies": [
+        "Use composite indexes for multi-field filters",
+        "Use GIN indexes for full-text search",
+        "Use B-tree indexes for range queries and sorting",
+        "Cache frequently accessed queries"
+      ]
+    },
+    "pagination": {
+      "description": "All endpoints support cursor-based or offset-based pagination",
+      "implementation": "Use LIMIT and OFFSET with proper indexing to avoid performance degradation"
+    },
+    "filtering": {
+      "description": "Filters are applied at database level using indexed columns",
+      "best_practices": [
+        "Apply most selective filters first",
+        "Use parameterized queries to prevent SQL injection",
+        "Combine multiple filters with AND/OR logic efficiently"
+      ]
+    },
+    "sorting": {
+      "description": "Sorting uses indexed columns when possible",
+      "fallback": "If sorting on non-indexed column, use in-memory sort for small result sets"
+    }
+  },
+  "data_integrity_rules": {
+    "deterministic_responses": {
+      "description": "Same query parameters always return same results (when data hasn't changed)",
+      "implementation": "Use consistent sorting and filtering logic"
+    },
+    "data_alignment": {
+      "description": "All search results must align with mock_data.json values",
+      "validation": "Search results reference actual asset_ids and values from mock dataset"
+    },
+    "no_hallucination": {
+      "description": "No synthetic or generated values outside the mock dataset",
+      "enforcement": "All returned data must exist in mock_data.json or be calculated from it"
+    }
+  },
+  "performance_targets": {
+    "query_response_time": {
+      "target": "< 50ms",
+      "measurement": "Time from query receipt to JSON response",
+      "optimization": "Use indexes, limit result sets, cache common queries"
+    },
+    "concurrent_queries": {
+      "target": "Support 100+ concurrent queries",
+      "implementation": "Use connection pooling and efficient query patterns"
+    },
+    "data_size": {
+      "target": "150+ records",
+      "scalability": "Design supports scaling to 10,000+ records with same indexes"
+    }
+  }
+}
+

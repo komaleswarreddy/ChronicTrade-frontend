@@ -1,0 +1,12 @@
+---
+alwaysApply: true
+---
+MARKDOWN FILE RULE (STRICT)
+
+Do NOT create any Markdown (.md) files by default
+
+Do NOT auto-generate README, documentation, notes, or summaries as Markdown
+
+Create a Markdown file ONLY when the user explicitly asks to create a markdown file or README
+
+Otherwise, respond using plain text only

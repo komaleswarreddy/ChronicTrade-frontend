@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  clerkId   String?  @unique
+  email     String   @unique
+  fullName  String?
+  holdings  Holding[]
+  createdAt DateTime @default(now())
+}
+
+model Wine {
+  id         String   @id @default(uuid())
+  lwin       String?
+  producer   String?
+  name       String?
+  vintage    Int?
+  region     String?
+  criticScore Int?
+  holdings   Holding[]
+  createdAt  DateTime @default(now())
+}
+
+model Holding {
+  id           String  @id @default(uuid())
+  owner        User    @relation(fields: [ownerId], references: [id])
+  ownerId      String
+  wine         Wine?   @relation(fields: [wineId], references: [id])
+  wineId       String?
+  qty          Int     @default(1)
+  purchasePrice Float
+  currentValue  Float
+  addedAt      DateTime @default(now())
+}
+

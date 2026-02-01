@@ -1,0 +1,10 @@
+// Alternative PostCSS config if @tailwindcss/postcss doesn't work
+// Try this if you get errors with the main config
+
+module.exports = {
+  plugins: [
+    require('tailwindcss'),
+    require('autoprefixer'),
+  ],
+}
+
