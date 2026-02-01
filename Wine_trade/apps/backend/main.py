@@ -249,11 +249,16 @@ def run_migrations_async():
 # MIGRATIONS DISABLED AT IMPORT TIME - moved to startup event
 # This ensures zero blocking during app import
 
+# CRITICAL: Log that app is being created (for debugging)
+print("📦 Creating FastAPI app instance...", flush=True)
+
 app = FastAPI(
     title="ChronoShift API", 
     version="1.0.0",
     description="Wine trading intelligence dashboard API. Built with Python + FastAPI + PostgreSQL to support agentic workflows, temporal simulations, and future AI-driven extensions."
 )
+
+print("✅ FastAPI app instance created", flush=True)
 
 # CORS configuration - FORCEFUL COMPLETE FIX
 # Allow frontend origin from environment variable, fallback to localhost for development
@@ -281,8 +286,8 @@ for origin in additional_origins:
         ALLOWED_ORIGINS.append(origin)
 
 # Log CORS configuration on startup
-print(f"🌐 CORS allowed origins: {ALLOWED_ORIGINS}")
-print(f"🌐 FRONTEND_ORIGIN env: {FRONTEND_ORIGIN}")
+print(f"🌐 CORS allowed origins: {ALLOWED_ORIGINS}", flush=True)
+print(f"🌐 FRONTEND_ORIGIN env: {FRONTEND_ORIGIN}", flush=True)
 
 # CRITICAL: CORS middleware MUST be added FIRST (before other middleware)
 # This ensures CORS headers are always set
@@ -362,6 +367,8 @@ logger = logging.getLogger("chronoshift.api")
 @app.on_event("startup")
 async def startup_events():
     """Startup event - server is ready, run migrations in background"""
+    print("[Startup] ✅ ChronoShift API server is ready", flush=True)
+    print("[Startup] RAG model will load on first query (lazy loading)", flush=True)
     logger.info("[Startup] ✅ ChronoShift API server is ready")
     logger.info("[Startup] RAG model will load on first query (lazy loading)")
     
@@ -370,18 +377,31 @@ async def startup_events():
     if os.getenv("ENV") == "production":
         migration_thread = threading.Thread(target=run_migrations_async, daemon=True)
         migration_thread.start()
+        print("[Startup] Migrations started in background thread", flush=True)
         logger.info("[Startup] Migrations started in background thread")
 
+# CRITICAL: Don't validate DATABASE_URL at import time - causes blocking
+# Validate it lazily when first used instead
 DATABASE_URL = os.getenv('DATABASE_URL')
 
+# Log warning but don't block import
 if not DATABASE_URL:
-    raise ValueError("DATABASE_URL environment variable is required. Please set it in your .env file")
+    print("⚠️  WARNING: DATABASE_URL not set. Database operations will fail.", flush=True)
+    print("⚠️  Set DATABASE_URL environment variable for database connectivity.", flush=True)
+else:
+    print("✅ DATABASE_URL is set", flush=True)
 
 # Thread pool executor for blocking DB operations
 db_executor = ThreadPoolExecutor(max_workers=10)
 
 def get_db_connection():
     """Get PostgreSQL database connection"""
+    # Validate DATABASE_URL when first used (not at import time)
+    if not DATABASE_URL:
+        raise HTTPException(
+            status_code=500, 
+            detail="DATABASE_URL environment variable is required. Please set it in your environment."
+        )
     try:
         conn = psycopg2.connect(DATABASE_URL)
         return conn

@@ -46,20 +46,41 @@ print(f"📚 API docs will be available at http://{host}:{port}/docs", flush=Tru
 print("-" * 50, flush=True)
 sys.stdout.flush()
 
-# CRITICAL: Start server IMMEDIATELY - uvicorn will handle app import
+# CRITICAL: Start server IMMEDIATELY - use programmatic API for better control
 # This ensures port binding happens as fast as possible
 try:
-    # Use reload=False for production (Render)
-    # This ensures faster startup and immediate port binding
-    uvicorn.run(
-        "main:app",
+    # Import app with timeout protection
+    print("📦 Importing FastAPI app...", flush=True)
+    try:
+        from main import app
+        print("✅ FastAPI app imported successfully", flush=True)
+    except Exception as import_error:
+        print(f"❌ ERROR: Failed to import app: {import_error}", flush=True)
+        import traceback
+        traceback.print_exc()
+        sys.stdout.flush()
+        sys.exit(1)
+    
+    # Use uvicorn's programmatic API with explicit config
+    config = uvicorn.Config(
+        app=app,
         host=host,
         port=port,
         log_level="info",
         access_log=True,
         reload=False,  # Disable reload in production
-        loop="asyncio"  # Use asyncio event loop
+        loop="asyncio",  # Use asyncio event loop
+        timeout_keep_alive=5,
+        timeout_graceful_shutdown=5,
     )
+    
+    server = uvicorn.Server(config)
+    print(f"🌐 Starting uvicorn server on {host}:{port}...", flush=True)
+    sys.stdout.flush()
+    
+    # Run server - this will bind to port immediately
+    server.run()
+    
 except KeyboardInterrupt:
     print("\n🛑 Server stopped by user", flush=True)
     sys.exit(0)
