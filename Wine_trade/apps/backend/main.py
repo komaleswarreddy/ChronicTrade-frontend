@@ -255,25 +255,87 @@ app = FastAPI(
     description="Wine trading intelligence dashboard API. Built with Python + FastAPI + PostgreSQL to support agentic workflows, temporal simulations, and future AI-driven extensions."
 )
 
-# CORS configuration
+# CORS configuration - FORCEFUL COMPLETE FIX
 # Allow frontend origin from environment variable, fallback to localhost for development
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+
+# Build allowed origins list - handle comma-separated values
 ALLOWED_ORIGINS = [
     origin.strip()
     for origin in FRONTEND_ORIGIN.split(",")
     if origin.strip()
 ]
 
+# CRITICAL: Always include Render frontend URL
+render_frontend = "https://chronictrade-frontend.onrender.com"
+if render_frontend not in ALLOWED_ORIGINS:
+    ALLOWED_ORIGINS.append(render_frontend)
+
+# Also add common variations
+additional_origins = [
+    "http://chronictrade-frontend.onrender.com",
+    "https://www.chronictrade-frontend.onrender.com",
+]
+for origin in additional_origins:
+    if origin not in ALLOWED_ORIGINS:
+        ALLOWED_ORIGINS.append(origin)
+
 # Log CORS configuration on startup
 print(f"🌐 CORS allowed origins: {ALLOWED_ORIGINS}")
+print(f"🌐 FRONTEND_ORIGIN env: {FRONTEND_ORIGIN}")
 
+# CRITICAL: CORS middleware MUST be added FIRST (before other middleware)
+# This ensures CORS headers are always set
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Origin",
+        "X-Requested-With",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers",
+    ],
+    expose_headers=["*"],
+    max_age=3600,
 )
+
+# CRITICAL: Force CORS headers on ALL responses - ensures 100% CORS support
+@app.middleware("http")
+async def force_cors_headers(request: Request, call_next):
+    """Force CORS headers on all responses - 100% guarantee"""
+    origin = request.headers.get("Origin")
+    
+    # Handle preflight OPTIONS requests
+    if request.method == "OPTIONS":
+        if origin in ALLOWED_ORIGINS:
+            from fastapi.responses import Response
+            return Response(
+                status_code=200,
+                headers={
+                    "Access-Control-Allow-Origin": origin,
+                    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD",
+                    "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept, Origin, X-Requested-With",
+                    "Access-Control-Allow-Credentials": "true",
+                    "Access-Control-Max-Age": "3600",
+                }
+            )
+    
+    # Process the request
+    response = await call_next(request)
+    
+    # Force CORS headers on all responses
+    if origin in ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD"
+        response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, Accept, Origin, X-Requested-With"
+    
+    return response
 
 # Request tracing middleware (for debugging timeouts)
 @app.middleware("http")
@@ -341,21 +403,21 @@ async def with_timeout(coro, timeout_seconds=10, error_msg="Operation timed out"
 
 # Authentication Endpoints
 @app.post("/api/auth/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-async def register(request: UserRegisterRequest):
+async def register(register_request: UserRegisterRequest, request: Request):
     """
     Register a new user account.
     
     Validates email and password, creates user, and returns JWT tokens.
     """
     # Validate email format
-    if not validate_email(request.email):
+    if not validate_email(register_request.email):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid email format"
         )
     
     # Validate password strength
-    is_valid, error_msg = validate_password_strength(request.password)
+    is_valid, error_msg = validate_password_strength(register_request.password)
     if not is_valid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -363,7 +425,7 @@ async def register(request: UserRegisterRequest):
         )
     
     # Create user
-    user = create_user(request.email, request.password, request.full_name)
+    user = create_user(register_request.email, register_request.password, register_request.full_name)
     
     if not user:
         raise HTTPException(
@@ -393,13 +455,19 @@ async def register(request: UserRegisterRequest):
         }
     })
     
+    # CRITICAL: Explicitly set CORS headers for register endpoint
+    origin = request.headers.get("Origin")
+    if origin in ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+    
     # Set refresh token as HTTP-only cookie
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
         secure=os.getenv("ENV") == "production",
-        samesite="strict",
+        samesite="lax",  # Changed for CORS compatibility
         max_age=7 * 24 * 60 * 60  # 7 days
     )
     
@@ -407,14 +475,14 @@ async def register(request: UserRegisterRequest):
 
 
 @app.post("/api/auth/login", response_model=AuthResponse)
-async def login(request: UserLoginRequest):
+async def login(login_request: UserLoginRequest, request: Request):
     """
     Login with email and password.
     
     Returns JWT access token and sets refresh token cookie.
     """
     # Verify user credentials
-    user = verify_user_password(request.email, request.password)
+    user = verify_user_password(login_request.email, login_request.password)
     
     if not user:
         raise HTTPException(
@@ -450,13 +518,20 @@ async def login(request: UserLoginRequest):
         }
     })
     
+    # CRITICAL: Explicitly set CORS headers for login endpoint
+    origin = request.headers.get("Origin")
+    if origin in ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+    
     # Set refresh token as HTTP-only cookie
+    # Changed samesite to "lax" for better CORS compatibility
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
         secure=os.getenv("ENV") == "production",
-        samesite="strict",
+        samesite="lax",  # Changed from "strict" for CORS compatibility
         max_age=7 * 24 * 60 * 60  # 7 days
     )
     
