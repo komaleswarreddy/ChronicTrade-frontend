@@ -214,9 +214,9 @@ except ImportError:  # pragma: no cover
     def load_dotenv(*args, **kwargs):
         return None
 
-# Auto-run migrations on startup (for Render.com and other cloud deployments)
-# CRITICAL: Run migrations in background to avoid blocking port binding
-# Server must bind to port immediately for Render deployment
+# CRITICAL: DO NOT run migrations at import time - causes blocking
+# Migrations will be handled by startup event instead
+# This ensures app imports immediately without any blocking operations
 import threading
 
 def run_migrations_async():
@@ -246,12 +246,8 @@ def run_migrations_async():
         print(f"⚠️ [Startup] Migration warning (non-critical): {e}")
         print("⚠️ [Startup] Continuing startup - migrations may already be applied")
 
-# Run migrations in background thread (non-blocking) - CRITICAL for Render deployment
-# This ensures server binds to port immediately
-if os.getenv("ENV") == "production":
-    migration_thread = threading.Thread(target=run_migrations_async, daemon=True)
-    migration_thread.start()
-    print("🚀 [Startup] Server starting immediately - migrations running in background")
+# MIGRATIONS DISABLED AT IMPORT TIME - moved to startup event
+# This ensures zero blocking during app import
 
 app = FastAPI(
     title="ChronoShift API", 
@@ -300,14 +296,19 @@ app.add_middleware(LoggingMiddleware)
 # Configure logger for this module
 logger = logging.getLogger("chronoshift.api")
 
-# RAG model will load lazily on first use to avoid blocking startup
-# This ensures the server binds to port immediately for Render deployment
-# The first RAG query will be slightly slower, but server startup is critical
+# Startup events - server is ready and migrations run in background
 @app.on_event("startup")
-async def startup_message():
-    """Startup event - server is ready"""
+async def startup_events():
+    """Startup event - server is ready, run migrations in background"""
     logger.info("[Startup] ✅ ChronoShift API server is ready")
     logger.info("[Startup] RAG model will load on first query (lazy loading)")
+    
+    # Run migrations in background thread after server starts
+    # This ensures port is bound before migrations run
+    if os.getenv("ENV") == "production":
+        migration_thread = threading.Thread(target=run_migrations_async, daemon=True)
+        migration_thread.start()
+        logger.info("[Startup] Migrations started in background thread")
 
 DATABASE_URL = os.getenv('DATABASE_URL')
 
@@ -542,18 +543,30 @@ async def get_current_user_info(current_user: Dict = Depends(get_current_user)):
     }
 
 
+@app.get("/")
+async def root():
+    """Root endpoint - responds immediately for Render health checks"""
+    return {"status": "ok", "service": "ChronoShift API", "version": "1.0.0"}
+
 @app.get("/api/health")
 async def health_check():
-    """Health check endpoint"""
+    """Health check endpoint - lightweight version for Render"""
+    # Return immediately without database check for faster response
+    # This ensures Render health checks pass quickly
+    return {"ok": True, "status": "healthy", "service": "ChronoShift API"}
+
+@app.get("/api/health/detailed")
+async def detailed_health_check():
+    """Detailed health check with database connection test"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT 1")
         cursor.close()
         conn.close()
-        return {"ok": True, "database": "connected"}
+        return {"ok": True, "database": "connected", "status": "healthy"}
     except Exception as e:
-        return {"ok": False, "database": "disconnected", "error": str(e)}
+        return {"ok": False, "database": "disconnected", "error": str(e), "status": "degraded"}
 
 # Test endpoints for debugging timeouts
 @app.get("/api/test/no-auth")
