@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>WineInvest — Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      background: #f4f6f8;
+      color: #1f2937;
+    }
+
+    /* NAVBAR */
+    header {
+      background: #ffffff;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 14px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-weight: 700;
+      font-size: 20px;
+      color: #7c2d12;
+    }
+
+    nav a {
+      margin-left: 24px;
+      text-decoration: none;
+      font-weight: 500;
+      color: #374151;
+    }
+
+    nav a:hover {
+      color: #7c2d12;
+    }
+
+    /* MAIN LAYOUT */
+    .container {
+      padding: 32px 40px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 24px;
+    }
+
+    /* PORTFOLIO CARD */
+    .card {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+    }
+
+    .portfolio-value {
+      font-size: 34px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .positive {
+      color: #16a34a;
+      font-weight: 600;
+    }
+
+    .negative {
+      color: #dc2626;
+      font-weight: 600;
+    }
+
+    /* ALERTS */
+    .alert {
+      padding: 14px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      background: #fef3c7;
+      font-size: 14px;
+    }
+
+    .alert strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    /* MARKET PULSE */
+    .pulse {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 16px;
+    }
+
+    .pulse div {
+      text-align: center;
+      flex: 1;
+    }
+
+    .pulse span {
+      display: block;
+      font-weight: 600;
+      margin-top: 4px;
+    }
+
+    /* TABLE */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 14px;
+    }
+
+    th {
+      background: #f9fafb;
+    }
+
+    /* BUTTONS */
+    .actions {
+      margin-top: 20px;
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn {
+      padding: 12px 18px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .btn-primary {
+      background: #7c2d12;
+      color: white;
+    }
+
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    /* FOOTER */
+    footer {
+      text-align: center;
+      padding: 24px;
+      font-size: 13px;
+      color: #6b7280;
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <div class="logo">WineInvest</div>
+  <nav>
+    <a href="#">Dashboard</a>
+    <a href="#">Market</a>
+    <a href="#">Portfolio</a>
+    <a href="#">Logistics</a>
+    <a href="#">Analytics</a>
+  </nav>
+</header>
+
+<div class="container">
+
+  <!-- TOP GRID -->
+  <div class="grid">
+
+    <!-- LEFT -->
+    <div class="card">
+      <h2>Portfolio Overview</h2>
+      <div class="portfolio-value">₹12,45,000</div>
+      <div class="positive">+₹8,200 today (+0.66%)</div>
+
+      <div class="pulse">
+        <div>
+          Bottles
+          <span>14</span>
+        </div>
+        <div>
+          Regions
+          <span>5</span>
+        </div>
+        <div>
+          Avg ROI
+          <span>+11.2%</span>
+        </div>
+      </div>
+
+      <h3 style="margin-top:24px;">Holdings</h3>
+
+      <table>
+        <tr>
+          <th>Wine</th>
+          <th>Vintage</th>
+          <th>Value</th>
+          <th>Trend</th>
+        </tr>
+        <tr>
+          <td>Château Lafite Rothschild</td>
+          <td>2015</td>
+          <td>₹3,80,000</td>
+          <td class="positive">↑</td>
+        </tr>
+        <tr>
+          <td>Dom Pérignon</td>
+          <td>2012</td>
+          <td>₹2,10,000</td>
+          <td class="positive">↑</td>
+        </tr>
+        <tr>
+          <td>Napa Cabernet</td>
+          <td>2016</td>
+          <td>₹1,45,000</td>
+          <td class="negative">↓</td>
+        </tr>
+      </table>
+
+      <div class="actions">
+        <button class="btn btn-primary">Explore Market</button>
+        <button class="btn btn-secondary">Add Wine</button>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div>
+      <div class="card">
+        <h3>Alerts & Opportunities</h3>
+
+        <div class="alert">
+          <strong>🔥 Arbitrage Opportunity</strong>
+          Buy UK → Sell Singapore (+₹9,400)
+        </div>
+
+        <div class="alert">
+          <strong>📉 Price Drop</strong>
+          Napa Cabernet 2016 fell 6% this week
+        </div>
+
+        <div class="alert">
+          <strong>🚚 Shipment Update</strong>
+          Bordeaux 2015 arriving in 2 days
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:20px;">
+        <h3>Market Pulse</h3>
+
+        <div class="pulse">
+          <div>
+            Bordeaux
+            <span class="positive">+4.2%</span>
+          </div>
+          <div>
+            Napa
+            <span class="negative">-2.1%</span>
+          </div>
+          <div>
+            Champagne
+            <span class="positive">+3.5%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<footer>
+  © 2025 WineInvest • Secure Wine Trading Platform
+</footer>
+
+</body>
+</html>
