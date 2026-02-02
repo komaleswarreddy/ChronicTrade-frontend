@@ -260,7 +260,7 @@ app = FastAPI(
 
 print("✅ FastAPI app instance created", flush=True)
 
-# CORS configuration - FORCEFUL COMPLETE FIX
+# CORS configuration - SIMPLE and CORRECT
 # Allow frontend origin from environment variable, fallback to localhost for development
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
 
@@ -271,76 +271,23 @@ ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 
-# CRITICAL: Always include Render frontend URL
+# Always include Render frontend URL
 render_frontend = "https://chronictrade-frontend.onrender.com"
 if render_frontend not in ALLOWED_ORIGINS:
     ALLOWED_ORIGINS.append(render_frontend)
-
-# Also add common variations
-additional_origins = [
-    "http://chronictrade-frontend.onrender.com",
-    "https://www.chronictrade-frontend.onrender.com",
-]
-for origin in additional_origins:
-    if origin not in ALLOWED_ORIGINS:
-        ALLOWED_ORIGINS.append(origin)
 
 # Log CORS configuration on startup
 print(f"🌐 CORS allowed origins: {ALLOWED_ORIGINS}", flush=True)
 print(f"🌐 FRONTEND_ORIGIN env: {FRONTEND_ORIGIN}", flush=True)
 
-# CRITICAL: CORS middleware MUST be added FIRST (before other middleware)
-# This ensures CORS headers are always set
+# CORS middleware - SIMPLE and CORRECT (handles everything)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
-    allow_headers=[
-        "Authorization",
-        "Content-Type",
-        "Accept",
-        "Origin",
-        "X-Requested-With",
-        "Access-Control-Request-Method",
-        "Access-Control-Request-Headers",
-    ],
-    expose_headers=["*"],
-    max_age=3600,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
-
-# CRITICAL: Force CORS headers on ALL responses - ensures 100% CORS support
-@app.middleware("http")
-async def force_cors_headers(request: Request, call_next):
-    """Force CORS headers on all responses - 100% guarantee"""
-    origin = request.headers.get("Origin")
-    
-    # Handle preflight OPTIONS requests
-    if request.method == "OPTIONS":
-        if origin in ALLOWED_ORIGINS:
-            from fastapi.responses import Response
-            return Response(
-                status_code=200,
-                headers={
-                    "Access-Control-Allow-Origin": origin,
-                    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD",
-                    "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept, Origin, X-Requested-With",
-                    "Access-Control-Allow-Credentials": "true",
-                    "Access-Control-Max-Age": "3600",
-                }
-            )
-    
-    # Process the request
-    response = await call_next(request)
-    
-    # Force CORS headers on all responses
-    if origin in ALLOWED_ORIGINS:
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD"
-        response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, Accept, Origin, X-Requested-With"
-    
-    return response
 
 # Request tracing middleware (for debugging timeouts)
 @app.middleware("http")
@@ -356,6 +303,28 @@ async def trace_requests(request: Request, call_next):
         elapsed = time.time() - start_time
         print(f"❌ ERROR {request.url.path} {type(e).__name__} ({elapsed:.3f}s)")
         raise
+
+# Global exception handler - ensures proper error responses
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler - ensures proper error responses"""
+    import traceback
+    
+    # Log the error
+    if isinstance(exc, HTTPException):
+        # HTTPException is already a proper response - just log it
+        print(f"⚠️ HTTPException: {exc.status_code} - {exc.detail}", flush=True)
+        raise exc  # Re-raise to let FastAPI handle it properly
+    else:
+        # Unexpected exception - log and return 500
+        print(f"❌ Unexpected error: {type(exc).__name__}: {str(exc)}", flush=True)
+        print(f"❌ Full traceback:\n{traceback.format_exc()}", flush=True)
+        
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Internal server error: {str(exc)}"}
+        )
 
 # Logging middleware for audit trail
 app.add_middleware(LoggingMiddleware)
@@ -475,19 +444,15 @@ async def register(register_request: UserRegisterRequest, request: Request):
         }
     })
     
-    # CRITICAL: Explicitly set CORS headers for register endpoint
-    origin = request.headers.get("Origin")
-    if origin in ALLOWED_ORIGINS:
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-    
     # Set refresh token as HTTP-only cookie
+    # CRITICAL: samesite="none" and secure=True for cross-origin cookies
+    is_production = os.getenv("ENV") == "production"
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=os.getenv("ENV") == "production",
-        samesite="lax",  # Changed for CORS compatibility
+        secure=is_production,  # REQUIRED on HTTPS
+        samesite="none" if is_production else "lax",  # REQUIRED for cross-origin
         max_age=7 * 24 * 60 * 60  # 7 days
     )
     
@@ -501,61 +466,92 @@ async def login(login_request: UserLoginRequest, request: Request):
     
     Returns JWT access token and sets refresh token cookie.
     """
-    # Verify user credentials
-    user = verify_user_password(login_request.email, login_request.password)
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
+    try:
+        # Verify user credentials
+        user = verify_user_password(login_request.email, login_request.password)
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password"
+            )
+        
+        # Update last login
+        try:
+            update_last_login(user['id'])
+        except Exception as e:
+            # Log but don't fail login if last_login update fails
+            print(f"⚠️ Failed to update last_login: {e}", flush=True)
+        
+        # Generate tokens
+        try:
+            access_token = create_access_token(user['id'], user['email'])
+            refresh_token = create_refresh_token(user['id'])
+        except Exception as e:
+            print(f"❌ Token creation failed: {e}", flush=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate authentication tokens"
+            )
+        
+        # Store refresh token
+        try:
+            from datetime import datetime, timedelta
+            expires_at = datetime.utcnow() + timedelta(days=7)
+            store_refresh_token(user['id'], refresh_token, expires_at)
+        except Exception as e:
+            print(f"⚠️ Failed to store refresh token: {e}", flush=True)
+            # Continue anyway - token is still valid
+        
+        # Get full user info
+        try:
+            user_info = get_user_by_id(user['id'])
+        except Exception as e:
+            print(f"❌ Failed to get user info: {e}", flush=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to retrieve user information"
+            )
+        
+        # Create response
+        response = JSONResponse(content={
+            "access_token": access_token,
+            "user": {
+                "id": user_info['id'],
+                "email": user_info['email'],
+                "full_name": user_info['full_name'],
+                "email_verified": user_info['email_verified'],
+                "created_at": user_info['created_at'].isoformat() if user_info.get('created_at') else None,
+                "last_login": user_info['last_login'].isoformat() if user_info.get('last_login') else None
+            }
+        })
+        
+        # Set refresh token as HTTP-only cookie
+        # CRITICAL: samesite="none" and secure=True for cross-origin cookies
+        is_production = os.getenv("ENV") == "production"
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=is_production,  # REQUIRED on HTTPS
+            samesite="none" if is_production else "lax",  # REQUIRED for cross-origin
+            max_age=7 * 24 * 60 * 60  # 7 days
         )
-    
-    # Update last login
-    update_last_login(user['id'])
-    
-    # Generate tokens
-    access_token = create_access_token(user['id'], user['email'])
-    refresh_token = create_refresh_token(user['id'])
-    
-    # Store refresh token
-    from datetime import datetime, timedelta
-    expires_at = datetime.utcnow() + timedelta(days=7)
-    store_refresh_token(user['id'], refresh_token, expires_at)
-    
-    # Get full user info
-    user_info = get_user_by_id(user['id'])
-    
-    # Create response
-    response = JSONResponse(content={
-        "access_token": access_token,
-        "user": {
-            "id": user_info['id'],
-            "email": user_info['email'],
-            "full_name": user_info['full_name'],
-            "email_verified": user_info['email_verified'],
-            "created_at": user_info['created_at'].isoformat() if user_info.get('created_at') else None,
-            "last_login": user_info['last_login'].isoformat() if user_info.get('last_login') else None
-        }
-    })
-    
-    # CRITICAL: Explicitly set CORS headers for login endpoint
-    origin = request.headers.get("Origin")
-    if origin in ALLOWED_ORIGINS:
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-    
-    # Set refresh token as HTTP-only cookie
-    # Changed samesite to "lax" for better CORS compatibility
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        httponly=True,
-        secure=os.getenv("ENV") == "production",
-        samesite="lax",  # Changed from "strict" for CORS compatibility
-        max_age=7 * 24 * 60 * 60  # 7 days
-    )
-    
-    return response
+        
+        return response
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions (401, 400, etc.) - they're already correct
+        raise
+    except Exception as e:
+        # Catch any unexpected errors and return 500 with message
+        print(f"❌ Login error: {type(e).__name__}: {str(e)}", flush=True)
+        import traceback
+        print(f"❌ Login traceback:\n{traceback.format_exc()}", flush=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login failed: {str(e)}"
+        )
 
 
 @app.post("/api/auth/refresh", response_model=TokenRefreshResponse)
@@ -607,7 +603,7 @@ async def logout(request: Request):
         key="refresh_token",
         httponly=True,
         secure=os.getenv("ENV") == "production",
-        samesite="strict"
+        samesite="none" if os.getenv("ENV") == "production" else "lax"
     )
     
     return response
